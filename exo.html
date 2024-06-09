@@ -12,20 +12,20 @@
 		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
 		<style>
 			body {
-				color: #000;
+				color: black;
 				font-family:Arial, Helvetica, sans-serif;
 				font-size:13px;
 				text-align:center;
 				font-weight: bold;
 				
 
-				background-color: #000;
+				background-color: white;
 				margin: 0px;
 				overflow: hidden;
 			}
 
 			#info {
-				color:#000;
+				color:black;
 				position: absolute;
 				top: 0px; width: 100%;
 				padding: 5px;
@@ -37,7 +37,7 @@
 			}
 
 			#legend {
-				display: block;
+				display: none;
 			}
 
 			.container {
@@ -121,7 +121,7 @@
 		<script src="js/jquery-3.3.1.js"></script>
 		<script src="js/dat.gui.min.js"></script>
 		<script src="render.js"></script>
-		<script src="points.js"></script>
+		<script src="points_exo.js"></script>
 		<!-- <script src="js/WebGL.js"></script> -->
 
 		<!--Custom GLSL shaders for three.js. Based on code from https://waldemarlehner.github.io/three.js-fiddles/varyingSizePoints/ -->
@@ -174,7 +174,7 @@
 				'Kepler-186 f', 'TRAPPIST-1 d', 'TRAPPIST-1 e', 'TRAPPIST-1 f', 'TRAPPIST-1 g', 'LHS 1140 b', 'Kepler-1638 b', 'Teegarden\'s Star b']
 			
 			let mappable = 0; // counts the mappable exoplanets
-
+			//controls.autoRotate = false; // stops auto rotation of the scene
 			Array.prototype.diff = function(a) {
 				return this.filter(function(i) {return a.indexOf(i) < 0;});
 			}
@@ -198,14 +198,15 @@
 				}
 
 				iqr = q3 - q1;
+
 				maxValue = q3 + iqr * 1.5;
 				minValue = q1 + iqr * 1.5;
-
+				maxValue = Math.max(...nums);
+				minValue = Math.min(...nums);
 				return nums.filter((x) => (x >= minValue) && (x <= maxValue));
 			}
 
-			// scales planet size based on max and min sizes in the dataset
-			// if no radj val found, set size to 2
+			
 			function scalePlanetJRadius(radj, minScale, maxScale, minVal, maxVal){
 				if(radj == null) return 2;
 
@@ -242,9 +243,9 @@
 				// $legend = "Legend";
 
 				exoplanetData = data;
-				console.log(exoplanetData);
+				<!-- console.log(exoplanetData); -->
 				console.log(data);
-
+				//controls.autoRotate = false;
 				console.log("Got confirmed exoplanet data");
 				console.log(data[0].ra);
 				console.log(data[0].dec);
@@ -255,10 +256,9 @@
 				let minRadJ = data[0].pl_radj;
 				let maxTemp = data[0].st_teff;
 				let minTemp = data[0].st_teff;
-				console.log("Max radj = " + maxRadJ);
-				console.log("Min radj = " + minRadJ);
-				console.log("Max temp = " + maxTemp);
-				console.log("Min temp = " + minTemp); 
+				let minDist = data[0].st_dist;
+				let maxDist = data[0].st_dist;
+
 
 				for(var i = 0; i < data.length; i++){
 					let cartesianCoord = raDecToXYZ(data[i].ra, data[i].dec, data[i].st_dist * 1);
@@ -275,6 +275,7 @@
 				
 				for (var i = 0; i < data.length; i++){
 					totalTemp += data[i].st_teff;
+					
 					tempCount++;
 				}
 
@@ -302,7 +303,7 @@
 					// take out non-mappable data points
 					if(data[i].ra != null && data[i].dec != null && data[i].st_dist != null){
 						mappable++;
-
+						if (data[i].pl_radj == 0) console.log("0 radj: " + data[i].pl_hostname);
 						// get max/min radius and effective temperature values
 						if((data[i].pl_radj != null) && (data[i].pl_radj > maxRadJ || maxRadJ == null)) maxRadJ = data[i].pl_radj;
 						if((data[i].pl_radj != null) && (data[i].pl_radj < minRadJ || minRadJ == null)) minRadJ = data[i].pl_radj;
@@ -310,6 +311,8 @@
 						if((data[i].st_teff != null) && (data[i].st_teff > maxTemp || maxTemp == null)) maxTemp = data[i].st_teff;
 						if((data[i].st_teff != null) && (data[i].st_teff < minTemp || minTemp == null)) minTemp = data[i].st_teff;
 
+						if((data[i].st_dist != null) && (data[i].st_dist > maxDist || maxDist == null)) maxDist = data[i].st_dist;
+						if((data[i].st_dist != null) && (data[i].st_dist < minDist || minDist == null) && data[i].st_dist != 0) minDist = data[i].st_dist;
 						cartesianDist.push(Math.sqrt((cartesianCoords[i][0] * cartesianCoords[i][0]) + (cartesianCoords[i][1] * cartesianCoords[i][1]) + (cartesianCoords[i][2] * cartesianCoords[i][2])));
 
 						// get exoplanet x, y, z coordinates and exoplanet name, stored in js object
@@ -317,6 +320,7 @@
 					}
 					else{
 						countNonMapped++;
+						console.log("Non-mappable exoplanet: " + data[i].pl_hostname + " " + data[i].ra + " " + data[i].dec + " " + data[i].st_dist + " " + data[i].st_teff);
 						cartesianDist.push(Math.sqrt((cartesianCoords[i][0] * cartesianCoords[i][0]) + (cartesianCoords[i][1] * cartesianCoords[i][1]) + (cartesianCoords[i][2] * cartesianCoords[i][2])));
 						generated_points.push({name: data[i].pl_hostname, coords: [1000000000000, 1, 1]});
 					}
@@ -324,7 +328,13 @@
 				}
 
 				console.log("mappable: " + mappable);
-
+				console.log("non-mappable: " + countNonMapped);
+				console.log("Max radj = " + maxRadJ);
+				console.log("Min radj = " + minRadJ);
+				console.log("Max temp = " + maxTemp);
+				console.log("Min temp = " + minTemp); 
+								console.log("Max dist = " + maxDist);
+				console.log("Min dist = " + minDist);
 				//update legend values
 				$('#cold').text(function(){
 					return "" + minTemp + " K"
@@ -372,7 +382,8 @@
 
 
 					// set exoplanet size and color vals
-					let size = scalePlanetJRadius(data[i].pl_radj, 10, 50, minRadJ, maxRadJ);
+					let size = scalePlanetJRadius(data[i].pl_radj, 10, 100, minRadJ, maxRadJ);
+					//console.log("size: " + data[i].pl_radj + " " + size);
 					sizes.push(size);
 					pointSizes.push(size);
 
@@ -382,11 +393,11 @@
 					// interpolate between blue and red. blue = min, red = max
 					let newColor = null;
 					if(data[i].st_teff != null) {
-						newColor = twoColorHeatMap(data[i].st_teff, minTemp, maxTemp, [0, 0, 255], [255, 0, 0]);
+						newColor = twoColorHeatMap(data[i].st_teff, minTemp, maxTemp, [0, 0, 255], [0, 0, 255]);
 						//console.log("Current color: " + newColor);
 					}
-					else newColor = [255, 255, 0];
-					
+					else newColor = [0, 0, 255];
+					newColor = [Math.floor(Math.random() * 256), Math.floor(Math.random() * 256), Math.floor(Math.random() * 256)];
 
 					let finalColor = new THREE.Color(convertRGBToScaleOne(newColor[0]), convertRGBToScaleOne(newColor[1]), convertRGBToScaleOne(newColor[2]))
 
@@ -422,7 +433,7 @@
 					transparent:true
 				});
 
-				console.log(colors);
+				//console.log(colors);
 
 				points = new THREE.Points(pointsGeometry, customShaderMaterial);
 
@@ -445,7 +456,7 @@
 				pointColors = [];
 				pointSizes = [];
 				
-
+				controls.autoRotate = false;
 				let maxRadJ = exoplanetData[0].pl_radj;
 				let minRadJ = exoplanetData[0].pl_radj;
 				let maxTemp = exoplanetData[0].st_teff;
@@ -539,9 +550,9 @@
 					// interpolate between blue and red. blue = min, red = max
 					let newColor = null;
 					if(exoplanetData[i].st_teff != null) {
-						newColor = twoColorHeatMap(exoplanetData[i].st_teff, minTemp, maxTemp, [0, 0, 255], [255, 0, 0]);
+						newColor = twoColorHeatMap(exoplanetData[i].st_teff, minTemp, maxTemp, [0, 0, 255], [0, 0, 255]);
 					}
-					else newColor = [255, 255, 0];
+					else newColor = [0, 0, 255];
 					
 
 					let finalColor = new THREE.Color(convertRGBToScaleOne(newColor[0]), convertRGBToScaleOne(newColor[1]), convertRGBToScaleOne(newColor[2]))
@@ -564,7 +575,7 @@
 						attenuationGeometry.vertices.push(vert);
 					}
 					
-					console.log("rendered with attenuation");
+					//console.log("rendered with attenuation");
 					attenuationGeometry.colors = pointColors;
 
 					let attenuationMaterial = new THREE.PointsMaterial({
@@ -629,7 +640,7 @@
 			}
 
 
-			var legendShown = true; // checks whether legend should be shown
+			var legendShown = false; // checks whether legend should be shown
 
 
 			// hide and show the legend
@@ -656,7 +667,7 @@
 			addEarth(scene);
 			
 			var sceneProperties = {
-				autoRotate: true,
+				autoRotate: false,
 				// renderWithTempOutliers: false,
 			 	renderWithAttenuation: false,
 				showOnlyEarthLikePlanets: false,
@@ -677,9 +688,10 @@
 			}
 
 			// add buttons/folders to dat.gui
+			/*
 			var gui = new dat.GUI({width: 400});
 			var autoRotateToggle = gui.add(sceneProperties, 'autoRotate').name('Auto Rotate').listen();
-			autoRotateToggle.onChange(function(value){controls.autoRotate = value});
+			autoRotateToggle.onChange(function(value){controls.autoRotate = false;});
 
 			var selectionToggle = gui.add(sceneProperties, 'selectionMode').name("Selection Mode").listen();
 			selectionToggle.onChange(function(value){
@@ -701,8 +713,8 @@
 
 			var legendToggle = gui.add(sceneProperties, 'displayLegend').name('Turn Off Legend').listen();
 			legendToggle.onChange(function(value){
-				legendShown = value;
-				if(legendShown){ showLegend(); }
+				legendShown = false;
+				if(legendShown){ hideLegend(); }
 				else{ hideLegend(); } 
 			});
 			gui.add(sceneProperties, 'reRender').name("Re-Render Scene");
@@ -716,6 +728,7 @@
 
 			reloadFolder.open();
 			gui.open();	
+			*/
 		</script>
 	</body>
 </html>

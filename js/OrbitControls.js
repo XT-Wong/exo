@@ -30,7 +30,7 @@ THREE.OrbitControls = function ( object, domElement ) {
 	this.maxDistance = Infinity;
 
 	// How far you can zoom in and out ( OrthographicCamera only )
-	this.minZoom = 0;
+	this.minZoom = 0.1;
 	this.maxZoom = Infinity;
 
 	// How far you can orbit vertically, upper and lower limits.
@@ -45,7 +45,7 @@ THREE.OrbitControls = function ( object, domElement ) {
 
 	// Set to true to enable damping (inertia)
 	// If damping is enabled, you must call controls.update() in your animation loop
-	this.enableDamping = false;
+	this.enableDamping = true;
 	this.dampingFactor = 0.25;
 
 	// This option actually enables dollying in and out; left as "zoom" for backwards compatibility.
@@ -55,18 +55,18 @@ THREE.OrbitControls = function ( object, domElement ) {
 
 	// Set to false to disable rotating
 	this.enableRotate = true;
-	this.rotateSpeed = 1.0;
+	this.rotateSpeed = 0.5;
 
 	// Set to false to disable panning
 	this.enablePan = true;
-	this.panSpeed = 1.0;
+	this.panSpeed = 0.5;
 	this.screenSpacePanning = false; // if true, pan in screen-space
-	this.keyPanSpeed = 7.0;	// pixels moved per arrow key push
+	this.keyPanSpeed = 0.0;	// pixels moved per arrow key push
 
 	// Set to true to automatically rotate around the target
 	// If auto-rotate is enabled, you must call controls.update() in your animation loop
-	this.autoRotate = false;
-	this.autoRotateSpeed = 2.0; // 30 seconds per round when fps is 60
+	this.autoRotate = true;
+	this.autoRotateSpeed = 1.0; // 30 seconds per round when fps is 60
 
 	// Set to false to disable use of the keys
 	this.enableKeys = true;
@@ -613,9 +613,9 @@ THREE.OrbitControls = function ( object, domElement ) {
 
 		var element = scope.domElement === document ? scope.domElement.body : scope.domElement;
 
-		rotateLeft( 2 * Math.PI * rotateDelta.x / element.clientHeight ); // yes, height
+		// rotateLeft( 2 * Math.PI * rotateDelta.x / element.clientHeight ); // yes, height
 
-		rotateUp( 2 * Math.PI * rotateDelta.y / element.clientHeight );
+		// rotateUp( 2 * Math.PI * rotateDelta.y / element.clientHeight );
 
 		rotateStart.copy( rotateEnd );
 

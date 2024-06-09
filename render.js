@@ -21,7 +21,8 @@ circle_sprite= new THREE.TextureLoader().load(
     function(texture){
         var material = new THREE.MeshBasicMaterial({
             map: texture,
-            transparent: true
+            transparent: true,
+            opacity: 0.5
         });
     }
 );
@@ -30,7 +31,7 @@ function init() {
 
     // create scene and set its background color
     scene = new THREE.Scene();
-    scene.background = new THREE.Color( 00000000 );
+    scene.background = new THREE.Color( 0,0,0.1);
 
     // create the scene lighting for earth
     var ambientLight = new THREE.AmbientLight(0xffffff);
@@ -126,7 +127,7 @@ function raDecToXYZ(ra, dec, distance){
     let z = rho * Math.sin(degToRad(theta));
 
     // console.log("X: " + x + ", Y: " + y + ", Z: " + z);
-    return [x, y, z];
+    return [parseFloat(x.toFixed(2)), parseFloat(y.toFixed(2)), parseFloat(z.toFixed(2))];
 }
 
 // when window resizes, moves the camera accordingly and changes the size of the render window

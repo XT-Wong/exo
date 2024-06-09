@@ -1,0 +1,967 @@
+
+<!-- OrbitControls example code used from https://threejs.org/examples/misc_controls_orbit.html -->
+<!-- Base tooltip and point drawing code based on https://beta.observablehq.com/@grantcuster/using-three-js-for-2d-data-visualization -->
+
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>Exoplanet Visualization</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				color: black;
+				font-family:Arial, Helvetica, sans-serif;
+				font-size:13px;
+				text-align:center;
+				font-weight: bold;
+				
+
+				background-color: rgb(8, 0, 16);
+				margin: 0px;
+				overflow: hidden;
+			}
+			
+			.dg .c input[type="text"] {
+				visibility: hidden;
+				width: 0px;
+			}
+		
+
+			#info {
+				color:white;
+				position: absolute;
+				top: 0px; width: 100%;
+				padding: 5px;
+				box-sizing: border-box;
+			}
+
+			#legend-text {
+				color: white;
+			}
+
+			#legend {
+				display: none;
+			}
+
+			.container {
+				width: 800px;
+				margin: auto;
+				position: fixed;
+				bottom: 0;
+				left: 0;
+			}
+
+			#col1 {
+				width: 40%;
+				float: left;
+				color: white;
+			}
+
+			#col2 {
+				
+				width: 30%;
+				float: left;
+				color: white;
+			}
+
+			#col2-content {
+				top: 120px;
+			}
+
+			h3{
+				text-align: left;
+			}
+		</style>
+	</head>
+
+	<!-- html for the legend -->
+	<body>
+		<div id="legend" class='container'>
+			<div id="col1">
+					<h1 id="legend-title" style="color: white; text-decoration: underline; text-align: right">Loading...</h1>
+					<div id="legend-text" style="text-align: left">
+						<h3><u>Exoplanet Color/Temperature</u></h3>
+						<img src="images/Heatmap_gradient.png">
+						<br>
+						<div id="cold" style="float:left">Cold</div><div id="hot" style="float: left; padding-left: 210px;">Hot</div>
+						<br>
+						<h3><u>Planet Size (Based On Initial View)</u></h3>
+						<img style="padding-left: 20px;" width="3" height="5" src="images/white_small.png"> <div id="null" style="float:right; padding-right: 40%">Null Size Val</div>
+						<br>
+						<br>
+						<img style="padding-left: 14px;" width="15" height="15" src="images/white.png"> <div id="small" style="float: right; padding-right: 50%">Small</div>
+						<br>
+						<br>
+						<img width="40" height="40" src="images/white_big.png"> <div id="big" style="float:right; padding-right: 50%">Big</div>
+						<br>
+						
+					</div>
+			</div>
+			<div id="col2">
+				<div id="col2-content">
+					<br>
+					<br>
+					<br>
+						<h3><u>Other</u></h3>
+						<img style="padding-left: 14px;" width="15" height="15" src="images/yellow.png"> <div id="yellow" style="float:right; padding-right: 30%">Null Temp Value</div>
+						<br>
+						<br>
+						<img style="padding-left: 14px;" width="15" height="15" src="images/green.png"> <div id="green" style="float:right; padding-right: 20%">Temp Outlier Values</div>
+						<br>
+						<h3><u>In Selection Mode</u></h3>
+						<img style="padding-left: 14px;" width="15" height="15" src="images/white.png"> <div id="white" style="float:right; padding-right: 30%">Selected Exoplanet</div>
+						<br>
+						<h3 style="color: white"><u><a href="index.html">Link to Exo Documentation</a></u></h3>
+				</div>
+			</div>
+			
+		</div>
+
+		<script src="js/three.js"></script>
+		<script src="js/d3.js"></script>
+		<script src="js/underscore.js"></script>
+        <script src="js/OrbitControls.js"></script>
+		<script src="js/jquery-3.3.1.js"></script>
+		<script src="js/dat.gui.min.js"></script>
+		<script src="render.js"></script>
+		<script src="points.js"></script>
+		<!-- <script src="js/WebGL.js"></script> -->
+
+		<!--Custom GLSL shaders for three.js. Based on code from https://waldemarlehner.github.io/three.js-fiddles/varyingSizePoints/ -->
+		<script type ="x-shader/x-vertex" id="vertexshader">
+			uniform float amplitude;
+			attribute float size;
+			attribute vec3 inputColor;
+			varying vec3 vColor;
+			attribute float alpha;
+			varying float vAlpha;
+			void main(){
+				vAlpha = alpha;
+				vColor = inputColor;
+				vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+				gl_PointSize = size * ( 300.0 / -mvPosition.z );
+				gl_Position = projectionMatrix * mvPosition;
+			}
+		</script>
+		<script type="x-shader/x-fragment" id="fragmentshader">
+			uniform vec3 color;
+			uniform sampler2D texture;
+			varying vec3 vColor;
+			varying float vAlpha;
+			void main(){
+				gl_FragColor = vec4(color * vColor, vAlpha*0.8);
+				gl_FragColor = gl_FragColor * texture2D(texture, gl_PointCoord);
+				//console.log(gl_FragColor.a)
+				if ( gl_FragColor.a < 0.5 ) discard;
+			}
+		</script>
+
+		<script>
+			// render setting
+			var showOnlyEarthLikePlanets = false;
+			var renderMaxTemperature = 60000;
+			var renderMinTemperature = 0;
+			var RenderMaxStarRadius = 200;
+			var RenderMinStarRadius = 0;
+			var pl_tempQs;
+			var pl_radQs;
+			var pl_maxTemp;
+			var pl_minTemp;
+			var pl_maxR;
+			const mass_Earth = 5.972e24;//kg
+			const radius_Earth = 6371000;//m
+			var pl_minR;
+			var DensityQs;
+			var RenderSiblings = [];
+			var RenderHabitable = false;
+			var sizescale = 1;
+			var customShaderMaterial = null; // check whether to use custom shader material
+			var UseRandomColor = true; //if not, color by temperature
+			var SizeFactor = 1; // 1 = random size， 2 = stellar radius， 3 = siblings count
+			var customSizeMin = 10;
+			var customSizeMax = 50;
+			var TempQs;
+			var RadQs;
+			var RawplanetData = null; //保存原始数据
+			var filtered_RawplanetData = null; //经过filter筛选的原始数据
+			var filtered_StarData = null;//筛选后的恒星数据，读取其planets属性可以知道其行星数据
+			
+			var cartesianCoords = []; // 点坐标
+			var cartesianDist = []; // 距离
+			var pointSizes = []; // 点大小
+			var pointColors = [];// 点颜色
+			var TemperatureoutlierNames = []; // 筛选温度异常值
+			var RadiusoutlierNames = [];// 筛选半径异常值
+			var percents = []; // (for debuggin) stores data percents calculated using min/max temp
+			var habitablePlanets = 'Display all exoplanets';
+			var conservativelyHabitable = ['Proxima Cen b', 'Kepler-442 b', 'Kepler-452 b', 'Wolf 1061 c', 'Kepler-1229 b', 'Kepler-62 f', 
+				'Kepler-186 f', 'TRAPPIST-1 d', 'TRAPPIST-1 e', 'TRAPPIST-1 f', 'TRAPPIST-1 g', 'LHS 1140 b', 'Kepler-1638 b', 'Teegarden\'s Star b']
+			let all_discmethod = [];
+			var PlanetofInterest;
+			let mappable = 0; // counts the mappable exoplanets
+			//controls.autoRotate = false; // stops auto rotation of the scene
+			Array.prototype.diff = function(a) {
+				return this.filter(function(i) {return a.indexOf(i) < 0;});
+			}
+
+			// given an array, filters out the outlier values from the array
+			// needed to filter out outlier values for temperature values so that color scale is accurate
+			function interquartileFiltering(values){
+				if(values.length < 4) return values;
+
+				let nums, q1, q3, iqr, maxValue, minValue;
+
+				nums = values.slice().sort((a, b) => a - b);
+
+				if((nums.length / 4) % 1 === 0){
+					q1 = 1/2 * (nums[(nums.length / 4)] + nums[(nums.length / 4) + 1]);
+					q3 - 1/2 * (nums[(nums.length * (3 / 4))] + nums[(nums.length * (3 / 4)) + 1]);
+				}
+				else{
+					q1 = nums[Math.floor(nums.length / 4 + 1)];
+					q3 = nums[Math.ceil(nums.length * (3 / 4) + 1)];
+				}
+
+				iqr = q3 - q1;
+
+				maxValue = q3 + iqr * 1.5;
+				minValue = q1 + iqr * 1.5;
+				maxValue = Math.max(...nums);
+				minValue = Math.min(...nums);
+				return nums.filter((x) => (x >= minValue) && (x <= maxValue));
+			}
+			function calculateESI(relativeMass, relativeRadius, surfaceTemperature, density) {
+				// 地球参考值
+				const earthRadius = 1.0;
+				const earthDensity = 5.50785;
+				const earthEscapeVelocity = 1.0;
+				const earthTemperature = 288; // Kelvin, 地球平均温度
+			
+				// 权重
+				const wR = 0.57;
+				const wRho = 1.07;
+				const wV = 0.70;
+				const wT = 5.58;
+			
+				// 计算行星的逃逸速度相对地球的逃逸速度
+				const escapeVelocity = Math.sqrt(relativeMass / relativeRadius);
+			
+				// 计算行星的密度相对地球的密度
+				const relativeDensity = density/earthDensity;
+				
+				// 标准化和权重化参数
+				//console.log("ESI",escapeVelocity, relativeDensity, surfaceTemperature, relativeRadius);
+				const rFactor = Math.pow(relativeRadius / earthRadius, wR);
+				const rhoFactor = Math.pow(relativeDensity / earthDensity, wRho);
+				const vFactor = Math.pow(escapeVelocity / earthEscapeVelocity, wV);
+				const tFactor = Math.pow(surfaceTemperature / earthTemperature, wT);
+			
+				// 计算 ESI
+				const esi = rFactor * rhoFactor * vFactor * tFactor;
+				
+				return esi;
+			}
+		
+			
+			
+			
+			function scalePlanetJRadius(radj, minScale, maxScale, minVal, maxVal){
+				if(radj == null) return 2;
+
+				let percent = (radj - minVal)/(maxVal - minVal);
+				
+				return minScale + (percent * (maxScale - minScale));
+			}
+			function calculateEscapeVelocity(masse, radiuse) {
+				// 引力常数 (m^3 kg^-1 s^-2)
+				const G = 6.67430e-11;
+				
+				// 计算逃逸速度 (m/s)
+				const escapeVelocity = Math.sqrt((2 * G * masse*mass_Earth) / radiuse*radius_Earth);
+				
+				return escapeVelocity;
+			}
+			//根据max和min的线性插值
+			function twoColorHeatMap(val, minVal, maxVal, RGBa, RGBb){
+				// if(val == null) return [255, 255, 0];
+
+				let value = (val - minVal)/(maxVal - minVal);
+				if (value > 1) value = 1;
+
+				let aR = RGBa[0], aG = RGBa[1], aB = RGBa[2];
+				let bR = RGBb[0], bG = RGBb[1], bB = RGBb[2];
+
+				let finalRed = (bR - aR) * value + aR;
+				let finalGreen = (bG - aG) * value + aG;
+				let finalBlue = (bB - aB) * value + aB;
+
+				return [finalRed, finalGreen, finalBlue];
+			}
+			//三分位数差值颜色
+			function quartileColorMap(val, Qs, RGBa, RGBb){
+				let minVal = Qs[0];
+				let maxVal = Qs[1];
+				let Q1 = Qs[2];
+				let Q3 = Qs[3];
+				r0 = RGBa[0], g0 = RGBa[1], b0 = RGBa[2];
+				r3 = RGBb[0], g3 = RGBb[1], b3 = RGBb[2];
+				r1 = (r0*3+r3)/4;
+				r2 = (r0+r3*3)/4;
+				g1 = (g0*3+g3)/4;
+				g2 = (g0+g3*3)/4;
+				b1 = (b0*3+b3)/4;
+				b2 = (b0+b3*3)/4;
+
+				let RGB1 = [r1, g1, b1];
+				let RGB2 = [r2, g2, b2];
+
+				let value;
+
+				if (val <= Q1) {
+					value = (val - minVal) / (Q1 - minVal);
+					return interpolateColor(value, RGBa, RGB1);
+				} else if (val <= Q3) {
+					value = (val - Q1) / (Q3 - Q1);
+					return interpolateColor(value, RGB1, RGB2);
+				} else {
+					value = (val - Q3) / (maxVal - Q3);
+					return interpolateColor(value, RGB2, RGBb);
+				}
+			}
+			function getQuartile(filteredData){
+
+				//console.log("filteredData",filteredData);
+				let sortedData = filteredData.sort((a, b) => a - b);
+				let min = sortedData[0];
+				let max = sortedData[sortedData.length - 1];
+				let Q1 = sortedData[Math.floor(sortedData.length / 4)];
+				let Q2 = sortedData[Math.floor(sortedData.length / 2)];
+				let Q3 = sortedData[Math.floor(sortedData.length * 3 / 4)];
+				return [min, max, Q1, Q2, Q3];
+			}
+			function interpolateColor(value, RGB1, RGB2) {
+				let r1 = RGB1[0], g1 = RGB1[1], b1 = RGB1[2];
+				let r2 = RGB2[0], g2 = RGB2[1], b2 = RGB2[2];
+			
+				let finalRed = (r2 - r1) * value + r1;
+				let finalGreen = (g2 - g1) * value + g1;
+				let finalBlue = (b2 - b1) * value + b1;
+			
+				return [finalRed, finalGreen, finalBlue];
+			}
+			//传入经过过滤的数据
+			
+			function renderScene(data, delay){
+				UseRandomColor = sceneProperties.randomColor;
+				SizeFactor = sceneProperties.SizeFactor;
+				
+				
+				
+				filtered_RawplanetData = data;
+
+				let seen_hostname = new Set();
+				//每个恒星只显示一个点
+				filtered_StarData = data.filter(d => {
+					if (seen_hostname.has(d.hostname)) {
+						return false;
+					} else {
+						seen_hostname.add(d.hostname);
+						return true;
+					}
+				});
+				//删除filtered_StarData的planets属性
+				filtered_StarData.forEach(d => delete d.planets);
+				filtered_RawplanetData.forEach((exoplanet, i) => {
+					let firstsibleidx = filtered_StarData.findIndex(d => d.hostname === exoplanet.hostname);
+					//console.log(firstsible);
+					//在行星数组中标出其所处恒星的索引
+					filtered_RawplanetData[i].firstsible = firstsibleidx ? firstsibleidx : null;
+					//在恒星数组中标出其所包含的行星的索引
+					if (filtered_StarData[firstsibleidx].planets == null){
+						filtered_StarData[firstsibleidx].planets = [];
+					}
+					filtered_StarData[firstsibleidx].planets.push(i);
+				});
+				
+				exoplanetData = filtered_StarData;
+
+				let filtered_RawplanetData_sortedByDate = filtered_RawplanetData.sort((a, b) => {
+					let dateA = new Date(a.disc_pubdate);
+					let dateB = new Date(b.disc_pubdate);
+					return dateA - dateB;
+				});
+				
+				//
+				
+				filtered_StarData = filtered_StarData.filter(d => d.sy_dist != null && d.sy_dist != 0);
+				exoplanetData = filtered_StarData;
+				
+
+
+				for(var i = 0; i < filtered_StarData.length; i++){
+					let cartesianCoord = raDecToXYZ(filtered_StarData[i].ra, filtered_StarData[i].dec, filtered_StarData[i].sy_dist*1.5+1);
+					cartesianCoords.push(cartesianCoord);
+				}
+
+				let countNonMapped = 0; //counts the nonmappable exoplanets
+
+				// in order to filter out outlier temps, get avg temp of all planets, and keep track of planets 
+				// with abnormally high temperature values
+				let allTemps = [];
+				let totalTemp = 0;
+				let tempCount = 0;
+				//console.log("filtered_StarDatalength"+filtered_StarData.length);
+
+				for (var i = 0; i < filtered_StarData.length; i++){
+					totalTemp += filtered_StarData[i].st_teff;
+					
+					tempCount++;
+				}
+				//console.log("total temp:" + totalTemp);
+				let avgTemp = totalTemp/tempCount;
+				//console.log("avg temp:" + avgTemp);
+
+				for (var i = 0; i < filtered_StarData.length; i++){
+					if(filtered_StarData[i].st_teff >= (avgTemp + 50000)){
+						TemperatureoutlierNames.push(filtered_StarData[i].pl_name);
+					}
+				}
+				for (var i = 0; i < filtered_StarData.length; i++){
+					if(filtered_StarData[i].st_rad == 0){
+						RadiusoutlierNames.push(filtered_StarData[i].pl_name);
+					}
+				}
+				
+				for(var i = 0; i < filtered_StarData.length; i++){
+					cartesianDist.push(Math.sqrt((cartesianCoords[i][0] * cartesianCoords[i][0]) + (cartesianCoords[i][1] * cartesianCoords[i][1]) + (cartesianCoords[i][2] * cartesianCoords[i][2])));
+					// get exoplanet x, y, z coordinates and exoplanet name, stored in js object
+					generated_points.push({name: filtered_StarData[i].hostname, coords: raDecToXYZ(filtered_StarData[i].ra, filtered_StarData[i].dec, filtered_StarData[i].sy_dist*1.5+1)});
+				}
+				// 
+
+				maxRadJ = RadQs[1];
+				minRadJ = RadQs[0];
+				maxTemp = TempQs[1];
+				minTemp = TempQs[0];
+				// store all colors, sizes, and vertices of the planets
+				let colors = [];
+				let sizes = [];
+				let verts = [];
+
+				let count = 0;
+
+				// get size and color values for each planet
+				//console.log("UseRandomColor",UseRandomColor);
+				//console.log("SizeFactor",SizeFactor);
+				for(var i = 0; i < filtered_StarData.length; i++){
+					//console.log("UseRandomColor",UseRandomColor,"SizeFactor",SizeFactor);
+
+					// 对温度异常，正常设置其大小，但选择特殊颜色；
+					if(TemperatureoutlierNames.includes(filtered_StarData[i].pl_name)){
+							let size = scalePlanetJRadius(filtered_StarData[i].st_rad, 5, 80, minRadJ, maxRadJ);
+							
+							sizes.push(size);
+							pointSizes.push(size);
+
+							let newColor = [128, 128, 255];
+
+							let finalColor = new THREE.Color(convertRGBToScaleOne(newColor[0]), convertRGBToScaleOne(newColor[1]), convertRGBToScaleOne(newColor[2]));
+							colors.push(finalColor.r, finalColor.g, finalColor.b);
+							pointColors.push(finalColor);
+
+							continue;
+					}
+					//对半径异常，正常设置其颜色，但选择特殊大小；
+					if(RadiusoutlierNames.includes(filtered_StarData[i].pl_name)){
+						let size = 4;
+						
+						sizes.push(size);
+						pointSizes.push(size);
+						let newColor = [255, 128, 128];
+						newColor = astroColorScale(filtered_StarData[i].st_teff);
+
+						let finalColor = new THREE.Color(convertRGBToScaleOne(newColor[0]), convertRGBToScaleOne(newColor[1]), convertRGBToScaleOne(newColor[2]));
+						colors.push(finalColor.r, finalColor.g, finalColor.b);
+						pointColors.push(finalColor);
+					
+						continue;
+					}
+					// 根据真实大小设置点的大小
+					else{
+						
+						if(SizeFactor ==  1){
+							// size在5=80之间随机
+							let size = Math.random() * (30 - 10) + 10*sizescale;
+							sizes.push(size);
+							pointSizes.push(size);
+						}
+						if(SizeFactor == 2){
+							size = scalePlanetJRadius(filtered_StarData[i].st_rad, 10, 80, minRadJ, maxRadJ)*sizescale;
+							sizes.push(size);
+							pointSizes.push(size);
+						}
+						if(SizeFactor == 3){
+							size = scalePlanetJRadius(filtered_StarData[i].sy_pnum, 10, 80, 1, 8)*sizescale;
+							sizes.push(size);
+							pointSizes.push(size);
+						}
+						let percent = (filtered_StarData[i].st_teff - minTemp)/(maxTemp - minTemp);
+						percents.push(percent);
+						
+						// 初始化页面时为了美观实用随机颜色，使用过滤器时使用温度颜色
+						//console.log("UseTempColor",UseRandomColor);
+						if (UseRandomColor == true){
+
+							let newColor = [Math.floor(Math.random() * 256), Math.floor(Math.random() * 256), Math.floor(Math.random() * 256)];
+							let finalColor = new THREE.Color(convertRGBToScaleOne(newColor[0]), convertRGBToScaleOne(newColor[1]), convertRGBToScaleOne(newColor[2]));
+							colors.push(finalColor.r, finalColor.g, finalColor.b);
+							pointColors.push(finalColor);	
+							//console.log("use random color");
+							
+						}
+						else{
+							
+							if(filtered_StarData[i].st_teff != null) {
+								let newColor = astroColorScale(filtered_StarData[i].st_teff);
+								let finalColor = new THREE.Color(convertRGBToScaleOne(newColor[0]), convertRGBToScaleOne(newColor[1]), convertRGBToScaleOne(newColor[2]));
+								colors.push(finalColor.r, finalColor.g, finalColor.b);
+								pointColors.push(finalColor);
+								//console.log("finalColor",finalColor);
+							}
+							else 
+							{
+								newColor = [0, 0, 255];
+								//console.log("finalColor",finalColor);
+								let finalColor = new THREE.Color(convertRGBToScaleOne(newColor[0]), convertRGBToScaleOne(newColor[1]), convertRGBToScaleOne(newColor[2]));
+								colors.push(finalColor.r, finalColor.g, finalColor.b);
+								pointColors.push(finalColor);
+							}
+						}
+					}
+				}
+				
+				// 坐标
+				for (let datum of generated_points) {
+					verts.push(datum.coords[0], datum.coords[1], datum.coords[2]);
+					
+				}
+				// 根据以上数据渲染点
+				let pointsGeometry = new THREE.BufferGeometry();
+				pointsGeometry.addAttribute("position",new THREE.BufferAttribute(new Float32Array(verts),3));
+				pointsGeometry.addAttribute("inputColor",new THREE.BufferAttribute(new Float32Array(colors),3));
+				//pointsGeometry.addAttribute("size",new THREE.BufferAttribute(new Float32Array(sizes),1));
+				//sizes = new Float32Array(sizes.length).fill(5);
+				if (delay > 0){
+				alphas = new Float32Array(verts.length / 3).fill(0);
+				}
+				else{
+					alphas = new Float32Array(verts.length / 3).fill(1);
+				}
+				pointsGeometry.addAttribute("size",new THREE.BufferAttribute(new Float32Array(sizes),1));
+				pointsGeometry.addAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
+				pointsGeometry.computeBoundingSphere();
+				
+				customShaderMaterial = new THREE.ShaderMaterial({
+					uniforms: {
+						amplitude: {value:1.0},
+						color: {value: new THREE.Color(0xFFFFFF)},
+						texture: {value: circle_sprite},
+						alpha: {value: 0.0}
+					},
+					vertexShader: document.getElementById( 'vertexshader' ).textContent,
+					fragmentShader: document.getElementById( 'fragmentshader' ).textContent,
+					depthTest:true,
+					transparent:true
+				});
+				points = new THREE.Points(pointsGeometry, customShaderMaterial);
+				points.material.transparent = true;
+				points.material.opacity = 0;
+				scene.add(points);
+				 // 每个点之间的延迟（毫秒）
+				if (delay > 0){
+					for (let i = 0; i < filtered_RawplanetData_sortedByDate.length; i++) {
+						setTimeout(() => {
+								idx = filtered_RawplanetData_sortedByDate[i].firstsible;
+								pointsGeometry.attributes.alpha.array[idx] = 1;
+								pointsGeometry.attributes.size.array[idx] += 10;
+								//console.log(star_cnt);
+								pointsGeometry.attributes.alpha.needsUpdate = true;
+								pointsGeometry.attributes.size.needsUpdate = true;
+						}, i * delay);
+					}
+			}
+				
+				
+		
+			}
+			function astroColorScale(temp){
+				if (temp < 3500){
+					return interpolateColor(temp/3500, [128, 0, 0], [255, 0, 0]);
+				}
+				else if (temp < 5000){
+					// interpolate between red and orange
+					return interpolateColor((temp-3500)/1500, [255, 0, 0], [255, 128, 0]);
+				}
+				else if (temp < 6500){
+					// interpolate between orange and yellow
+					return interpolateColor((temp-5000)/1500, [255, 128, 0], [255, 255, 0]);
+					
+				}
+				else if (temp < 10000){
+					// interpolate between yellow and white
+
+					return interpolateColor((temp-6500)/3500, [255, 255, 0], [255, 255, 224]);
+				}
+				else if (temp < 20000){
+					// interpolate between white and light blue
+
+					return interpolateColor((temp-10000)/10000, [255, 255, 224], [255, 255, 255]);
+				}
+				else if (temp < 30000){
+					// interpolate between white and light blue
+
+					return interpolateColor((temp-20000)/10000, [255, 255, 255], [128, 128, 255]);
+				}
+				else{
+					return [128, 128, 255];
+				}
+
+
+			}
+			function convertRGBToScaleOne(RGB){
+				return RGB/255;
+			}
+
+			// get the exoplanet data from csv
+			
+			d3.csv('./data2024.csv').then(data => {
+				$('#legend-title').text(function() { return "Legend"});
+				// $legend = "Legend";
+				data.forEach(d => {
+					// add all discmethod values to array
+					//console.log(d);
+					if(!all_discmethod.includes(d.discoverymethod)){
+						//console.log(d.discoverymethod);
+						all_discmethod.push(d.discoverymethod);
+					}
+					
+					for (let key in d) {
+						
+					  if (!isNaN(d[key])) {
+						
+						d[key] = +d[key];  // 将数值字符串转换为数值
+					  }
+					}
+					//d.vesc = calculateEscapeVelocity(d.pl_bmasse, d.pl_rade);
+
+					d.esi = calculateESI(d.pl_bmasse, d.pl_rade, d.pl_eqt, d.pl_dens);
+				});
+				//	打印d.esi和d.pl_eqt
+				//
+				console.log(data.map(d=>d.pl_eqt))
+				console.log(data.map(d=>d.esi))
+				RawplanetData = data;
+				//
+				let filteredData = RawplanetData.filter(d => !TemperatureoutlierNames.includes(d.pl_name)).map(d => d.st_teff);
+				TempQs = getQuartile(filteredData);
+			
+				console.log("tempMinMax",TempQs);
+				filteredData = RawplanetData.filter(d => !RadiusoutlierNames.includes(d.pl_name)).map(d => d.st_rad);
+				RadQs = getQuartile(filteredData);
+
+
+
+
+				console.log("radMinMax",RadQs);
+				//get pl_maxTemp
+				pl_tempQs = getQuartile(RawplanetData.map(d => d.st_teff));
+				pl_maxTemp = pl_tempQs[1];
+				pl_minTemp = pl_tempQs[0];
+				pl_radQs = getQuartile(RawplanetData.map(d => d.st_rad));
+				pl_maxR = pl_radQs[1];
+				pl_minR = pl_radQs[0];
+
+				DensityQs = getQuartile(RawplanetData.map(d => d.pl_dens));
+				console.log("DensityQs",DensityQs);
+
+				
+				renderScene(data, 0);
+				// actually, data here is stellar data
+			})
+			.catch(error => console.error(error));
+			// initialize and animate the scene
+			init();
+			animate();
+
+			function reRenderScene(Delay){
+				
+				scene.remove(points);
+				points = null;
+				generated_points = [];
+				pointColors = [];
+				pointSizes = [];
+				maxT = sceneProperties.maxT;
+				minT = sceneProperties.minT;
+				maxR = sceneProperties.maxR;
+				minR = sceneProperties.minR;
+				console.log(maxT, minT, maxR, minR);
+				rerenderData = RawplanetData.filter(d=>d.st_teff >= minT && d.st_teff <= maxT && d.st_rad >= minR && d.st_rad <= maxR);
+				stars = sceneProperties.renderstarcount;
+				siblings = sceneProperties.rendersiblingcount;
+				if (stars != -1){
+					rerenderData = rerenderData.filter(d=>d.sy_snum == stars);
+				}
+				if (siblings != -1){
+					rerenderData = rerenderData.filter(d=>d.sy_pnum == siblings);
+				}
+				
+				
+				if (RenderHabitable){
+					rerenderData = rerenderData.filter(d=>conservativelyHabitable.includes(d.pl_name));
+				}
+				sizescale = Math.min(Math.sqrt(RawplanetData.length/rerenderData.length),5);
+				//camera.position.set( 400*(1+sizescale*0.5), 200*(1+sizescale*0.5), 0 );
+				//console.log("rerenderData",rerenderData);
+				//console.log(renderMaxTemperature, renderMinTemperature, RenderMaxStarRadius, RenderMinStarRadius);
+				renderScene(rerenderData, Delay);
+			}
+
+			// resets the camera to original position/orientation
+			function resetCamera() {
+				camera.position.set(400, 200, 0);
+				controls.target = new THREE.Vector3(0,0,0);
+			}
+
+			var legendShown = false; // checks whether legend should be shown
+
+
+			// hide and show the legend
+			function hideLegend(){
+				//update legend values
+				$('#legend').css({"display": "none"});
+			}
+
+			function showLegend(){
+				//update legend values
+				$('#legend').css({"display": "block"});
+			}
+			
+			// Hover and tooltip interaction
+            raycaster = new THREE.Raycaster();
+            raycaster.params.Points.threshold = 10;
+
+			// adds the container in which highlighted points are rendered
+            hoverContainer = new THREE.Object3D()
+			scene.add(hoverContainer);
+			addEarth(scene);
+			
+			var sceneProperties = {
+				autoRotate: false,
+				// showOnlyEarthLikePlanets: false,
+				randomColor: true,
+				SizeFactor: 1,
+				habitable: 'Display all',
+				reRender: function() {reRenderScene(2);SizeFactor = 3;this.SizeFactor = 3;},
+				resetCamera: function() {resetCamera()},
+				displayLegend: true,
+				hideTooltips: function(){
+					hideMainTooltip();
+					hideTooltip2();
+				},
+
+				habitable: 'Display all',
+
+				displayLegend: true,
+				maxT: 40000,
+				minT: 0,
+				maxR: 100,
+				minR: 0,
+				maxTBar: 10000,
+				minTBar: 0,
+				maxRBar: 10000,
+				minRBar: 0,
+				renderstarcount: -1,
+				rendersiblingcount: -1,
+			}
+
+			// add buttons/folders to dat.gui
+			
+			var gui = new dat.GUI({width: 400});
+			var autoRotateToggle = gui.add(sceneProperties, 'autoRotate').name('Auto Rotate').listen();
+			autoRotateToggle.onChange(function(value){controls.autoRotate = Boolean(controls.autoRotate);});
+			var resetCameraButton = gui.add(sceneProperties, 'resetCamera').name('Reset Camera');
+			var reloadFolder = gui.addFolder('Requires Re-Render');
+			// var tempOutliersToggle = reloadFolder.add(sceneProperties, 'renderWithTempOutliers').name('Render ETemp Outliers').listen();
+			// tempOutliersToggle.onChange(function(value){renderWithTempOutliers = value});
+			var colorOptions = {'Random': true, 'By Temperature': false}; 
+			var SizeOptions = {'Random': 1, 'By Stellar Radius': 2, 'By Sibling Count': 3}; 
+			var starCountOptions = { 'all': -1, '1': 1, '2': 2, '3': 3, '4': 4}; 
+			var siblingCountOptions = { 'all': -1, '1': 1, '2': 2, '3': 3, '4': 4,'5': 5, '6': 6,'7': 7, '8': 8}; 
+			var legendToggle = gui.add(sceneProperties, 'displayLegend').name('Turn Off Legend').listen();
+			legendToggle.onChange(function(value){
+				legendShown = value;
+				if(legendShown){ showLegend(); }
+				else{ hideLegend(); } 
+			});
+			gui.add(sceneProperties, 'reRender').name("Play Animation");
+			var filterFolder = gui.addFolder('filter');
+
+			MaxTcontroller = filterFolder.add(sceneProperties, 'maxTBar', 0, 10000).name('Max Temperature:40000').onChange(()=>reRenderScene(0));
+			MinTcontroller = filterFolder.add(sceneProperties, 'minTBar', 0, 10000).name('Min Temperature: 0').onChange(()=>reRenderScene(0));
+			MaxRcontroller = filterFolder.add(sceneProperties, 'maxRBar', 0, 10000).name('Max Radius:109.49').onChange(()=>reRenderScene(0));
+			MinRcontroller = filterFolder.add(sceneProperties, 'minRBar', 0, 10000).name('Min Radius:0').onChange(()=>reRenderScene(0));
+			
+			colorController = filterFolder.add(sceneProperties, 'randomColor', colorOptions).name('Color');
+			colorController.onChange(function(value) {
+				sceneProperties.randomColor = value;
+				
+				//console.log("UseRandomColor",value,UseRandomColor,sceneProperties.randomColor);
+				reRenderScene(0);
+			});
+
+			SizeController = filterFolder.add(sceneProperties, 'SizeFactor', SizeOptions).name('Size');
+			SizeController.onChange(function(value) {
+				sceneProperties.SizeFactor = value;
+				
+				//console.log("SizeFactor",value,SizeFactor,sceneProperties.SizeFactor);
+				reRenderScene(0);
+			});
+			
+			
+			starCountController = filterFolder.add(sceneProperties, 'renderstarcount', starCountOptions).name('Star(s) in System');
+			starCountController.onChange(function(value) {
+				sceneProperties.renderstarcount = value;
+				reRenderScene(0);
+			});
+			
+			siblingCountController = filterFolder.add(sceneProperties, 'rendersiblingcount', siblingCountOptions).name('Sibling(s) in System');
+			siblingCountController.onChange(function(value) {
+				sceneProperties.rendersiblingcount = value;
+				reRenderScene(0);
+			});
+			MaxTcontroller.onChange(()=>{
+				min = TempQs[0];
+				max = TempQs[1];
+				Q1 = TempQs[2];
+				Q2 = TempQs[3];
+				Q3 = TempQs[4];
+				if(sceneProperties.maxTBar < 2500){
+					sceneProperties.maxT = sceneProperties.maxTBar / 2500 * Q1;
+				}
+				else if(sceneProperties.maxTBar < 5000){
+					sceneProperties.maxT = Q1 + (sceneProperties.maxTBar - 2500) / 2500 * (Q2 - Q1);
+				}
+				else if(sceneProperties.maxTBar < 7500){
+					sceneProperties.maxT = Q2 + (sceneProperties.maxTBar - 5000) / 2500 * (Q3 - Q2);
+				}
+				else if(sceneProperties.maxTBar < 8750){
+					sceneProperties.maxT = Q3 + (sceneProperties.maxTBar - 7500) / 1250 * (20000 - Q3);
+					
+				}
+				else{
+					sceneProperties.maxT = 20000 + (sceneProperties.maxTBar - 8750) / 1250 * (max - 20000);
+				}
+				//console.log("maxT",sceneProperties.maxT);
+				MaxTcontroller.name('Max Temperature: '+sceneProperties.maxT.toFixed(0).toString());
+			reRenderScene(0);
+			}
+			);
+			MaxRcontroller.onChange(()=>{
+				min = RadQs[0];
+				max = RadQs[1];
+				Q1 = RadQs[2];
+				Q2 = RadQs[3];
+				Q3 = RadQs[4];
+				if(sceneProperties.maxRBar < 2500){
+					sceneProperties.maxR = sceneProperties.maxRBar / 2500 * Q1;
+				}
+				else if(sceneProperties.maxRBar < 5000){
+					sceneProperties.maxR = Q1 + (sceneProperties.maxRBar - 2500) / 2500 * (Q2 - Q1);
+				}
+				else if(sceneProperties.maxRBar < 7500){
+					sceneProperties.maxR = Q2 + (sceneProperties.maxRBar - 5000) / 2500 * (Q3 - Q2);
+				}
+				else if(sceneProperties.maxRBar < 8750){
+					sceneProperties.maxR = Q3 + (sceneProperties.maxRBar - 7500) / 1250 * (50 - Q3);
+					
+				}
+				else{
+					sceneProperties.maxR = 50 + (sceneProperties.maxRBar - 8750) / 1250 * (max - 50);
+				}
+				//console.log("maxR",sceneProperties.maxR);
+				MaxRcontroller.name('Max Radius: '+sceneProperties.maxR.toFixed(3).toString());
+			reRenderScene(0);
+			}
+			);
+			MinTcontroller.onChange(()=>{
+				min = TempQs[0];
+				max = TempQs[1];
+				Q1 = TempQs[2];
+				Q2 = TempQs[3];
+				Q3 = TempQs[4];
+				if(sceneProperties.minTBar < 2500){
+					sceneProperties.minT = sceneProperties.minTBar / 2500 * Q1;
+				}
+				else if(sceneProperties.minTBar < 5000){
+					sceneProperties.minT = Q1 + (sceneProperties.minTBar - 2500) / 2500 * (Q2 - Q1);
+				}
+				else if(sceneProperties.minTBar < 7500){
+					sceneProperties.minT = Q2 + (sceneProperties.minTBar - 5000) / 2500 * (Q3 - Q2);
+				}
+				else if(sceneProperties.minTBar < 8750){
+					sceneProperties.minT = Q3 + (sceneProperties.minTBar - 7500) / 1250 * (20000 - Q3);
+					
+				}
+				else{
+					sceneProperties.minT = 20000 + (sceneProperties.minTBar - 8750) / 1250 * (max - 20000);
+				}
+				MinTcontroller.name('Min Temperature: ' + sceneProperties.minT.toFixed(0).toString());
+
+
+			reRenderScene(0);
+			}
+			);
+			MinRcontroller.onChange(()=>{
+				min = RadQs[0];
+				max = RadQs[1];
+				Q1 = RadQs[2];
+				Q2 = RadQs[3];
+				Q3 = RadQs[4];
+				console.log("Barvalue",sceneProperties.minRBar);
+				
+				if(sceneProperties.minRBar < 2500){
+					sceneProperties.minR = sceneProperties.minRBar / 2500 * Q1;
+				}
+				else if(sceneProperties.minRBar < 5000){
+					sceneProperties.minR = Q1 + (sceneProperties.minRBar - 2500) / 2500 * (Q2 - Q1);
+				}
+				else if(sceneProperties.minRBar < 7500){
+					sceneProperties.minR = Q2 + (sceneProperties.minRBar - 5000) / 2500 * (Q3 - Q2);
+				}
+				else if(sceneProperties.minRBar < 8750){
+					sceneProperties.minR = Q3 + (sceneProperties.minRBar - 7500) / 1250 * (50 - Q3);
+					
+				}
+				else{
+					sceneProperties.minR = 50 + (sceneProperties.minRBar - 8750) / 1250 * (max - 50);
+				}
+				
+				MinRcontroller.name('Min Radius: ' + sceneProperties.minR.toFixed(3).toString());
+				reRenderScene(0);
+			}
+			);
+			// var planetSelect = gui.add(sceneProperties, 'habitablePlanets', 
+			// 	['Display conservatively habitable', 'Display optimistically habitable', 'Display both', 'Display all exoplanets']).name('Habitable Planet Display').listen();
+			// planetSelect.onChange(function(value){
+			// 	habitablePlanets = value;
+			// 	console.log(habitablePlanets);
+			// 	reRenderScene();
+			// })
+			filterFolder.open();
+			reloadFolder.open();
+			gui.open();	
+			
+		</script>
+	</body>
+</html>
