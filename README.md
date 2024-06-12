@@ -1,4 +1,4 @@
 # Exo: An Exoplanet Visualization
 Origin: [here](https://afiliz.github.io/exo/exo.html)
-What we do:
- 
+To see the original version, run exo.html
+To see our version, run exo_new.html
