@@ -232,6 +232,37 @@
 				return nums.filter((x) => (x >= minValue) && (x <= maxValue));
 			}
 			function calculateESI(relativeMass, relativeRadius, surfaceTemperature, density) {
+				// 地球的参数
+				const earthDensity = 1.0; // 地球密度（单位：地球密度）
+				const earthSurfaceTemperature = 288.0; // 地球表面温度（单位：开尔文）
+			
+				// 参数权重
+				const weightRadius = 0.57;
+				const weightDensity = 1.07;
+				const weightEscapeVelocity = 0.7;
+				const weightSurfaceTemperature = 5.58;
+			
+				// 计算相对逃逸速度
+				const escapeVelocity = Math.sqrt(relativeMass / relativeRadius);
+			
+				// 计算相似度
+				function similarityIndex(value, earthValue, weight) {
+					return Math.pow(1 - Math.abs((value - earthValue) / (value + earthValue)), weight);
+				}
+			
+				// 计算各参数的相似度指数
+				const esiRadius = similarityIndex(relativeRadius, 1.0, weightRadius);
+				const esiDensity = similarityIndex(density, earthDensity, weightDensity);
+				const esiEscapeVelocity = similarityIndex(escapeVelocity, 1.0, weightEscapeVelocity);
+				const esiSurfaceTemperature = similarityIndex(surfaceTemperature, earthSurfaceTemperature, weightSurfaceTemperature);
+			
+				// 计算最终的 ESI
+				const esi = Math.pow(esiRadius * esiDensity * esiEscapeVelocity * esiSurfaceTemperature, 1 / 4);
+			
+				return esi;
+			}
+			/*
+			function calculateESI(relativeMass, relativeRadius, surfaceTemperature, density) {
 				// 地球参考值
 				const earthRadius = 1.0;
 				const earthDensity = 5.50785;
@@ -262,7 +293,7 @@
 				
 				return esi;
 			}
-		
+			*/
 			
 			
 			
@@ -439,7 +470,9 @@
 							//pointSizes.push(size);
 						}
 						if (UseRandomColor == true){
+							console.log("random");
 							let newColor = [Math.floor(Math.random() * 256), Math.floor(Math.random() * 256), Math.floor(Math.random() * 256)];
+							
 							let finalColor = new THREE.Color(convertRGBToScaleOne(newColor[0]), convertRGBToScaleOne(newColor[1]), convertRGBToScaleOne(newColor[2]));
 							colors.push(finalColor.r, finalColor.g, finalColor.b);
 							pointColors.push(finalColor);
@@ -479,9 +512,11 @@
 				if (delay > 0){
 				alphas = new Float32Array(verts.length / 3).fill(0);
 				}
+
 				else{
 					alphas = new Float32Array(verts.length / 3).fill(1);
 				}
+
 				pointsGeometry.addAttribute("size",new THREE.BufferAttribute(new Float32Array(sizes),1));
 				pointsGeometry.addAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
 				pointsGeometry.computeBoundingSphere();
@@ -497,12 +532,13 @@
 					fragmentShader: document.getElementById( 'fragmentshader' ).textContent,
 					depthTest:true,
 				});
+
 				points = new THREE.Points(pointsGeometry, customShaderMaterial);
 
-				
 				scene.add(points);
 				
-				 // 每个点之间的延迟（毫秒）
+				// 每个点之间的延迟（毫秒）
+
 				if (delay > 0){
 					let filtered_RawplanetData_sortedByDate = filtered_RawplanetData.sort((a, b) => {
 						let dateA = new Date(a.disc_pubdate);
@@ -720,8 +756,8 @@
 			var reloadFolder = gui.addFolder('Requires Re-Render');
 			// var tempOutliersToggle = reloadFolder.add(sceneProperties, 'renderWithTempOutliers').name('Render ETemp Outliers').listen();
 			// tempOutliersToggle.onChange(function(value){renderWithTempOutliers = value});
-			var colorOptions = { 'By Temperature': false,'Random': true,}; 
-			var SizeOptions = { 'By Stellar Radius': 2, 'By Sibling Count': 3,'Random': 1}; 
+			var colorOptions = { 'By Temperature': false}; 
+			var SizeOptions = { 'By Stellar Radius': 2, 'By Sibling Count': 3}; 
 			var starCountOptions = { 'all': -1, '1': 1, '2': 2, '3': 3, '4': 4}; 
 			var siblingCountOptions = { 'all': -1, '1': 1, '2': 2, '3': 3, '4': 4,'5': 5, '6': 6,'7': 7, '8': 8}; 
 			var legendToggle = gui.add(sceneProperties, 'displayLegend').name('Turn Off Legend').listen();
@@ -741,7 +777,7 @@
 			colorController = filterFolder.add(sceneProperties, 'randomColor', colorOptions).name('Color');
 			colorController.onChange(function(value) {
 				sceneProperties.randomColor = value;
-				
+				console.log("UseRandomColor",value,UseRandomColor,sceneProperties.randomColor);
 				//console.log("UseRandomColor",value,UseRandomColor,sceneProperties.randomColor);
 				reRenderScene(0);
 			});
@@ -877,13 +913,6 @@
 				reRenderScene(0);
 			}
 			);
-			// var planetSelect = gui.add(sceneProperties, 'habitablePlanets', 
-			// 	['Display conservatively habitable', 'Display optimistically habitable', 'Display both', 'Display all exoplanets']).name('Habitable Planet Display').listen();
-			// planetSelect.onChange(function(value){
-			// 	habitablePlanets = value;
-			// 	console.log(habitablePlanets);
-			// 	reRenderScene();
-			// })
 			filterFolder.open();
 			reloadFolder.open();
 			gui.open();	

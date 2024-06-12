@@ -7,10 +7,6 @@ var multipleSelectionMode = false;
 
 // on mouse down, translate cursor coordinates to three.js coords, and check any intersections with any points
 function onMouseDown(event){
-    if (event.type === 'touchstart') {
-        event.preventDefault();
-        event.stopPropagation();
-    }
 
     let mouseVector = new THREE.Vector3(
         (event.clientX / window.innerWidth) * 2 - 1,
@@ -19,22 +15,14 @@ function onMouseDown(event){
     let mouse_position = [(event.clientX / window.innerWidth) * 2 - 1, -(event.clientY / window.innerHeight) * 2 + 1];
     checkIntersects(mouseVector, mouse_position);
 }
-function f(x){
-    if(x < 1){
-        return Math.min(-(x-1)*(x-1)+1.05,1);
-    }
-    else{
-        return Math.min(1/x+0.05,1);
-    }
-}
 function colormap(x) {
-    const ratio = f(x);
+    const ratio = x;
     
     // 灰色 RGB (128, 128, 128)
-    const gray = { r: 128, g: 128, b: 128 };
+    const gray = { r: 32, g: 32, b: 32 };
     
     // 绿色 RGB (0, 255, 0)
-    const green = { r: 120, g: 210, b: 35 };
+    const green = { r: 35, g: 70, b: 210 };
     //console.log(ratio);
     // 计算线性插值
     const r = Math.round(gray.r * (1 - ratio) + green.r * ratio);
@@ -102,7 +90,7 @@ function checkIntersects(mouse_vector, mouse_position) {
 
     } else {
         removeHighlights();
-        hideMainTooltip();
+        //hideMainTooltip();
     }
     
     
@@ -180,15 +168,17 @@ function updateTooltip() {
                 $ball.style.display = 'inline-block';
                 $ball.style.width = '5px';
                 $ball.style.height = '5px';
+                
                 $ball.style.borderRadius = '50%';
                 $ball.style.backgroundColor = 'white';
                 $ball.style.marginRight = '10px';
                 
                 let $ball_right = document.createElement('span');
                 $ball_right.style.display = 'inline-block';
-                //半径与tooltip_state[key].pl_radj成比例
-                $ball_right.style.width = (Math.sqrt(tooltip_state[key].pl_radj) * 30) + 'px';
-                $ball_right.style.height = (Math.sqrt(tooltip_state[key].pl_radj) * 30) + 'px';
+                $ball_right.id = 'ball'+key.slice(6);
+                
+                $ball_right.style.width = (Math.pow(tooltip_state[key].pl_radj,2/3) * 30) + 'px';
+                $ball_right.style.height = $ball_right.style.width;
                 $ball_right.style.borderRadius = '50%';
                 $ball_right.style.backgroundColor = colormap(tooltip_state[key].esi);
                 //console.log(colormap(tooltip_state[key].esi),tooltip_state[key].esi);
@@ -200,8 +190,8 @@ function updateTooltip() {
                 //$ball_right.style.opacity = ((tooltip_state[key].pl_dens-2)/78*0.7 + 0.3);
                 //增加onclick事件，让全局变量PlanetofInterest等于tooltip_state.idx
                 $ball_right.onclick = function(){
-                    PlanetofInterest = tooltip_state.idx;
-                    //console.log(PlanetofInterest);
+                    PlanetofInterest = tooltip['idx'+key.slice(6)];
+                    console.log(PlanetofInterest);
                 }
                 $planet_tip.innerHTML = '';
                 $planet_tip.appendChild($ball);
@@ -225,10 +215,7 @@ function updateTooltip() {
                 periodNode.appendChild(document.createTextNode(' Orbital Period: ' + tooltip_state[key].pl_orbper.toFixed(2) + ' days'));
                 $planet_tip.appendChild(periodNode);
                 
-                
-                //第四行显示发现方法
-                
-                //第五行显示发现年份
+                //第四行显示发现年份
                 $planet_tip.appendChild(document.createElement('br'));
                 let yearNode = document.createElement('span');
                 yearNode.style.paddingLeft = '12px';
@@ -251,12 +238,17 @@ function updateTooltip() {
                 $planet_tip.appendChild(tempNode);
                 //$planet_tip.appendChild(document.createTextNode(tooltip_state[key].pl_name + ' Jupiter Radius: ' + tooltip_state[key].pl_radj + ' Orbital Period: ' + tooltip_state[key].pl_orbper.toFixed(2) + ' days'));
                 //show planet density
+                //$planet_tip.appendChild(document.createElement('br'));
+                //let densityNode = document.createElement('span');
+                //densityNode.style.paddingLeft = '12px';
+                //densityNode.appendChild(document.createTextNode(' Density: ' + tooltip_state[key].pl_dens + ' g/cm^3'));
+                //$planet_tip.appendChild(densityNode);
+                
                 $planet_tip.appendChild(document.createElement('br'));
-                let densityNode = document.createElement('span');
-                densityNode.style.paddingLeft = '12px';
-                densityNode.appendChild(document.createTextNode(' Density: ' + tooltip_state[key].pl_dens + ' g/cm^3'));
-                $planet_tip.appendChild(densityNode);
-
+                let massNode = document.createElement('span');
+                massNode.style.paddingLeft = '12px';
+                massNode.appendChild(document.createTextNode(' Earth Mass: ' + tooltip_state[key].pl_bmasse));
+                $planet_tip.appendChild(massNode);
                 //第七行显示d.esi
                 $planet_tip.appendChild(document.createElement('br'));
                 let esiNode = document.createElement('span');
@@ -264,16 +256,28 @@ function updateTooltip() {
                 esiNode.appendChild(document.createTextNode(' Earth Similarity: ' + tooltip_state[key].esi));
                 $planet_tip.appendChild(esiNode);
 
-            
             }
             else{
                 //console.log('hide planet tip',key);
                 let $planet_tip = document.querySelector('#' + key + '_tip');
                 $planet_tip.style.display = 'none';
             
-         }
+             }
+             
     }
+
+    
     });
+   //console.log(tooltip_state.discovered_planets);
+    for(let i = 0; i < tooltip_state.discovered_planets; i++){
+        let $ball_right = document.getElementById('ball'+i);
+        //console.log($ball_right);
+        $ball_right.onclick = function(){
+            PlanetofInterest = tooltip_state['idx'+i];
+            //console.log(PlanetofInterest);
+            
+        }
+    }
 }
 
 // shows the tooltip at the given position and uses the given data
@@ -286,15 +290,16 @@ function showTooltip(mouse_position, datum, index) {
         tooltip_state.temp = datum.st_teff;
         tooltip_state.starcnt = datum.sy_snum;
         tooltip_state.sibcnt = datum.sy_pnum;
-        tooltip_state.idx = index;
+        
         // tooltip_state.cart = cartesianCoords[index];
     
         //
-        console.log(datum.planets);
+        //console.log(datum.planets);
         datum.planets.forEach((planetIndex, i) => {
             // 为每个planet创建一个新的tooltip属性
             tooltip_state['planet' + i] = filtered_RawplanetData[planetIndex];
-            console.log(tooltip_state['planet' + i]);
+            tooltip_state['idx' + i] = planetIndex;
+            //console.log(tooltip_state['planet' + i]);
         });
     tooltip_state.discovered_planets = datum.planets.length;
     tmp = datum.planets.length;
