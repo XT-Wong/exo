@@ -19,11 +19,11 @@ function colormap(x) {
     const ratio = x;
     
     // 灰色 RGB (128, 128, 128)
-    const gray = { r: 32, g: 32, b: 32 };
+    const gray = { r: 64, g: 64, b: 64 };
     
     // 绿色 RGB (0, 255, 0)
     const green = { r: 35, g: 70, b: 210 };
-    //console.log(ratio);
+
     // 计算线性插值
     const r = Math.round(gray.r * (1 - ratio) + green.r * ratio);
     const g = Math.round(gray.g * (1 - ratio) + green.g * ratio);
@@ -82,9 +82,7 @@ function checkIntersects(mouse_vector, mouse_position) {
         let datum = generated_points[index];
         let datum_tt = exoplanetData[index];
 
-        //console.log(datum.name);
-        //console.log(datum_tt.hostname);
-
+       
         highlightPoint(datum, index);
         showTooltip(mouse_position, datum_tt, index);
 
@@ -110,7 +108,7 @@ let tooltip_state = { display: "none" }
 
 // create tooltip html attributes
 let tooltip_template = document.createRange().createContextualFragment(
-`<div id="tooltip" style="border-right: 0px solid #000000; border-bottom: 0px solid #00257c; display: none; position: absolute; font-size: 12px; width: 320px; text-align: center; line-height: 1; padding: 6px; background: rgba(0,0,0,0.5); color:white; overflow: auto; max-height: 800px; font-family: sans-serif;">
+`<div id="tooltip" style="border-right: 0px solid #000000; border-bottom: 0px solid #00257c; display: none; position: absolute; font-size: 12px; width: 320px; text-align: center; line-height: 1; padding: 6px; background: rgba(0,0,0,0.3); color:white; overflow: auto; max-height: 800px; font-family: sans-serif;">
     <div id="name_tip" style="text-decoration: underline; text-align: center; padding: 4px; margin-bottom: 4px;font-size: 14px; font-weight: bold;"></div>
     <div id="distance_tip" style="text-align: left; padding: 4px; margin-bottom: 4px;"></div>
     <div id="radius_tip" style="text-align: left; padding: 4px; margin-bottom: 4px;"></div>
@@ -143,7 +141,7 @@ function updateTooltip() {
     $sibling_tip.innerText = "Planets: " + tooltip_state.sibcnt;
 
     Object.keys(tooltip_state).forEach((key) => {
-        //console.log(key);
+
         
         if (key.startsWith('planet'))
         {
@@ -189,10 +187,7 @@ function updateTooltip() {
                 //透明度与密度线性相关，最小透明度为0.3，最大透明度为1，密度最小值为2，最大值为80
                 //$ball_right.style.opacity = ((tooltip_state[key].pl_dens-2)/78*0.7 + 0.3);
                 //增加onclick事件，让全局变量PlanetofInterest等于tooltip_state.idx
-                $ball_right.onclick = function(){
-                    PlanetofInterest = tooltip['idx'+key.slice(6)];
-                    console.log(PlanetofInterest);
-                }
+                
                 $planet_tip.innerHTML = '';
                 $planet_tip.appendChild($ball);
                 
@@ -274,8 +269,7 @@ function updateTooltip() {
         //console.log($ball_right);
         $ball_right.onclick = function(){
             PlanetofInterest = tooltip_state['idx'+i];
-            //console.log(PlanetofInterest);
-            
+            console.log(PlanetofInterest); 
         }
     }
 }

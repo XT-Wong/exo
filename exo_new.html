@@ -26,7 +26,7 @@
 				visibility: hidden;
 				width: 0px;
 			}
-		
+			
 
 			#info {
 				color:white;
@@ -43,7 +43,9 @@
 			#legend {
 				display: none;
 			}
-
+			#pubdate {
+				transition: opacity 2s; /* 设置过渡效果 */
+			}
 			.container {
 				width: 800px;
 				margin: auto;
@@ -77,6 +79,7 @@
 
 	<!-- html for the legend -->
 	<body>
+		<div id="pubdate" style="position: absolute; bottom: 10px; left: 10px; opacity: 0"></div>
 		<div id="legend" class='container'>
 			<div id="col1">
 					<h1 id="legend-title" style="color: white; text-decoration: underline; text-align: right">Loading...</h1>
@@ -150,7 +153,7 @@
 			varying vec3 vColor;
 			varying float vAlpha;
 			void main(){
-				gl_FragColor = vec4(color * vColor, vAlpha);
+				gl_FragColor = vec4(color * vColor, vAlpha*0.8);
 				gl_FragColor = gl_FragColor * texture2D(texture, gl_PointCoord);
 				//console.log(gl_FragColor.a)
 				if ( gl_FragColor.a < 0.5 ) discard;
@@ -166,13 +169,17 @@
 			var RenderMinStarRadius = 0;
 			var pl_tempQs;
 			var pl_radQs;
+			var renderMode = 0;//0 = render star info, 1 = render planet info
 			var pl_maxTemp;
 			var pl_minTemp;
 			var pl_maxR;
 			const mass_Earth = 5.972e24;//kg
 			const radius_Earth = 6371000;//m
 			var pl_minR;
-			var DensityQs;
+			var topDiscmethodKeys ;
+			var topDisclocaleKeys ;
+			var topDisctelescopeKeys ;
+			var topDiscfacilityKeys ;
 			var RenderSiblings = [];
 			var RenderHabitable = false;
 			var sizescale = 1;
@@ -186,7 +193,9 @@
 			var RawplanetData = null; //保存原始数据
 			var filtered_RawplanetData = null; //经过filter筛选的原始数据
 			var filtered_StarData = null;//筛选后的恒星数据，读取其planets属性可以知道其行星数据
-			
+			var pl_radQs;
+			var pl_massQs;
+			var DensityQs;
 			var cartesianCoords = []; // 点坐标
 			var cartesianDist = []; // 距离
 			var pointSizes = []; // 点大小
@@ -198,6 +207,9 @@
 			var conservativelyHabitable = ['Proxima Cen b', 'Kepler-442 b', 'Kepler-452 b', 'Wolf 1061 c', 'Kepler-1229 b', 'Kepler-62 f', 
 				'Kepler-186 f', 'TRAPPIST-1 d', 'TRAPPIST-1 e', 'TRAPPIST-1 f', 'TRAPPIST-1 g', 'LHS 1140 b', 'Kepler-1638 b', 'Teegarden\'s Star b']
 			let all_discmethod = [];
+			var all_disclocale = [];
+			var all_disctelescope = [];
+			var all_discfacility = [];
 			var PlanetofInterest = null;
 			let mappable = 0; // counts the mappable exoplanets
 			
@@ -261,41 +273,6 @@
 			
 				return esi;
 			}
-			/*
-			function calculateESI(relativeMass, relativeRadius, surfaceTemperature, density) {
-				// 地球参考值
-				const earthRadius = 1.0;
-				const earthDensity = 5.50785;
-				const earthEscapeVelocity = 1.0;
-				const earthTemperature = 288; // Kelvin, 地球平均温度
-			
-				// 权重
-				const wR = 0.57;
-				const wRho = 1.07;
-				const wV = 0.70;
-				const wT = 5.58;
-			
-				// 计算行星的逃逸速度相对地球的逃逸速度
-				const escapeVelocity = Math.sqrt(relativeMass / relativeRadius);
-			
-				// 计算行星的密度相对地球的密度
-				const relativeDensity = density/earthDensity;
-				
-				// 标准化和权重化参数
-				//console.log("ESI",escapeVelocity, relativeDensity, surfaceTemperature, relativeRadius);
-				const rFactor = Math.pow(relativeRadius / earthRadius, wR);
-				const rhoFactor = Math.pow(relativeDensity / earthDensity, wRho);
-				const vFactor = Math.pow(escapeVelocity / earthEscapeVelocity, wV);
-				const tFactor = Math.pow(surfaceTemperature / earthTemperature, wT);
-			
-				// 计算 ESI
-				const esi = rFactor * rhoFactor * vFactor * tFactor;
-				
-				return esi;
-			}
-			*/
-			
-			
 			
 			function scalePlanetJRadius(radj, minScale, maxScale, minVal, maxVal){
 				if(radj == null) return 2;
@@ -304,16 +281,7 @@
 				
 				return minScale + (percent * (maxScale - minScale));
 			}
-			function calculateEscapeVelocity(masse, radiuse) {
-				// 引力常数 (m^3 kg^-1 s^-2)
-				const G = 6.67430e-11;
-				
-				// 计算逃逸速度 (m/s)
-				const escapeVelocity = Math.sqrt((2 * G * masse*mass_Earth) / radiuse*radius_Earth);
-				
-				return escapeVelocity;
-			}
-			//根据max和min的线性插值
+
 			function twoColorHeatMap(val, minVal, maxVal, RGBa, RGBb){
 				// if(val == null) return [255, 255, 0];
 
@@ -384,11 +352,9 @@
 			//传入经过过滤的数据
 			
 			function renderScene(data, delay){
-				console.log("Current time0: " + new Date().getTime());
 				UseRandomColor = sceneProperties.randomColor;
 				SizeFactor = sceneProperties.SizeFactor;
 				filtered_RawplanetData = data;
-
 				let seen_hostname = new Set();
 				//每个恒星只显示一个点
 				filtered_StarData = data.filter(d => {
@@ -404,9 +370,8 @@
 					if (hostnameToIndex[d.hostname] === undefined) {
 						hostnameToIndex.set(d.hostname, i);
 					}
-					
-					
 				});
+
 				filtered_StarData.forEach(d => delete d.planets);
 				console.log(hostnameToIndex);
 				filtered_RawplanetData.forEach((exoplanet, i) => {
@@ -419,8 +384,6 @@
 					}
 					filtered_StarData[firstsibleidx].planets.push(i);
 				});
-
-				
 				exoplanetData = filtered_StarData;
 				filtered_StarData = filtered_StarData.filter(d => d.sy_dist != null && d.sy_dist != 0);
 				exoplanetData = filtered_StarData;
@@ -437,7 +400,6 @@
 					// get exoplanet x, y, z coordinates and exoplanet name, stored in js object
 					generated_points.push({name: filtered_StarData[i].hostname, coords: raDecToXYZ(filtered_StarData[i].ra, filtered_StarData[i].dec, filtered_StarData[i].sy_dist*1.5+1)});
 				}
-				// 
 
 				maxRadJ = RadQs[1];
 				minRadJ = RadQs[0];
@@ -453,6 +415,17 @@
 				
 				// get size and color values for each planet
 				for(var i = 0; i < filtered_StarData.length; i++){	
+					if (renderMode == 1){
+						let newColor = twoColorHeatMap(filtered_StarData[i].planets.length, 1, 7, [128, 0, 128], [173, 216, 230]);
+						
+						let finalColor = new THREE.Color(convertRGBToScaleOne(newColor[0]), convertRGBToScaleOne(newColor[1]), convertRGBToScaleOne(newColor[2]));
+						colors.push(finalColor.r, finalColor.g, finalColor.b);
+						pointColors.push(finalColor);
+						let size = scalePlanetJRadius(filtered_StarData[i].planets.length, 10, 80, 1, 7)*sizescale;
+							sizes.push(size);
+					
+					}
+					else{
 						if(SizeFactor ==  1){
 							// size在5=80之间随机
 							let size = (Math.random() * (30 - 10) + 10)*sizescale;
@@ -469,31 +442,33 @@
 							sizes.push(size);
 							//pointSizes.push(size);
 						}
-						if (UseRandomColor == true){
-							console.log("random");
-							let newColor = [Math.floor(Math.random() * 256), Math.floor(Math.random() * 256), Math.floor(Math.random() * 256)];
-							
-							let finalColor = new THREE.Color(convertRGBToScaleOne(newColor[0]), convertRGBToScaleOne(newColor[1]), convertRGBToScaleOne(newColor[2]));
-							colors.push(finalColor.r, finalColor.g, finalColor.b);
-							pointColors.push(finalColor);
-						}
-						else{	
-							if(filtered_StarData[i].st_teff != null) {
-								let newColor = astroColorScale(filtered_StarData[i].st_teff);
+						
+						
+							if (UseRandomColor == true){
+								
+								let newColor = [Math.floor(Math.random() * 256), Math.floor(Math.random() * 256), Math.floor(Math.random() * 256)];
+								
 								let finalColor = new THREE.Color(convertRGBToScaleOne(newColor[0]), convertRGBToScaleOne(newColor[1]), convertRGBToScaleOne(newColor[2]));
 								colors.push(finalColor.r, finalColor.g, finalColor.b);
 								pointColors.push(finalColor);
 							}
-							else 
-							{
-			
-								//console.log("finalColor",finalColor);
-								let finalColor = new THREE.Color(convertRGBToScaleOne(newColor[0]), convertRGBToScaleOne(newColor[1]), convertRGBToScaleOne(newColor[2]));
-								colors.push(finalColor.r, finalColor.g, finalColor.b);
-								pointColors.push(finalColor);
+							else{	
+								if(filtered_StarData[i].st_teff != null) {
+									let newColor = astroColorScale(filtered_StarData[i].st_teff);
+									let finalColor = new THREE.Color(convertRGBToScaleOne(newColor[0]), convertRGBToScaleOne(newColor[1]), convertRGBToScaleOne(newColor[2]));
+									colors.push(finalColor.r, finalColor.g, finalColor.b);
+									pointColors.push(finalColor);
+								}
+								else 
+								{
+				
+									//console.log("finalColor",finalColor);
+									let finalColor = new THREE.Color(convertRGBToScaleOne(newColor[0]), convertRGBToScaleOne(newColor[1]), convertRGBToScaleOne(newColor[2]));
+									colors.push(finalColor.r, finalColor.g, finalColor.b);
+									pointColors.push(finalColor);
+								}
 							}
-						}
-					
+					}
 				}
 				pointSizes = sizes;
 				//pointColors = colors;
@@ -534,17 +509,29 @@
 				});
 
 				points = new THREE.Points(pointsGeometry, customShaderMaterial);
-
+				var discmethod_dict = {};
+				
 				scene.add(points);
 				
 				// 每个点之间的延迟（毫秒）
 
 				if (delay > 0){
+
 					let filtered_RawplanetData_sortedByDate = filtered_RawplanetData.sort((a, b) => {
 						let dateA = new Date(a.disc_pubdate);
 						let dateB = new Date(b.disc_pubdate);
 						return dateA - dateB;
 					});
+					var pubdate = document.getElementById('pubdate');
+					pubdate.style.display = 'block';
+					pubdate.style.fontFamily = 'Arial'; // 设置字体为 Arial
+					pubdate.style.color = 'white'; 
+					pubdate.style.fontSize = '40px'; // 设置字体大小
+					// 设置颜色为白色
+					console.log(pubdate);
+					pubdate.style.opacity = '1';
+					//在画布左下角显示filtered_RawplanetData_sortedByDate.disc_pubdate
+					//console.log(filtered_RawplanetData_sortedByDate);
 					for (let i = 0; i < filtered_RawplanetData_sortedByDate.length; i++) {
 						setTimeout(() => {
 								idx = filtered_RawplanetData_sortedByDate[i].firstsible;
@@ -553,8 +540,15 @@
 								//console.log(star_cnt);
 								pointsGeometry.attributes.alpha.needsUpdate = true;
 								pointsGeometry.attributes.size.needsUpdate = true;
+								
+								pubdate.textContent = filtered_RawplanetData_sortedByDate[i].disc_pubdate;
+								console.log(pubdate);
 						}, i * delay);
 					}
+					//做一个动画使得pubdate逐渐消失
+					setTimeout(() => {
+						pubdate.style.opacity = '0';
+					}, filtered_RawplanetData_sortedByDate.length * delay);
 			}
 				
 				
@@ -602,15 +596,33 @@
 			
 			d3.csv('./data2024.csv').then(data => {
 				$('#legend-title').text(function() { return "Legend"});
-				// $legend = "Legend";
+				var discmethodCounts = {};
+				var disclocaleCounts = {};
+				var disctelescopeCounts = {};
+				var discfacilityCounts = {};
 				data.forEach(d => {
 					// add all discmethod values to array
 					//console.log(d);
+					discmethodCounts[d.discoverymethod] = (discmethodCounts[d.discoverymethod] || 0) + 1;
+					disclocaleCounts[d.disc_locale] = (disclocaleCounts[d.disc_locale] || 0) + 1;
+					disctelescopeCounts[d.disc_telescope] = (disctelescopeCounts[d.disc_telescope] || 0) + 1;
+					discfacilityCounts[d.disc_facility] = (discfacilityCounts[d.disc_facility] || 0) + 1;
 					if(!all_discmethod.includes(d.discoverymethod)){
 						//console.log(d.discoverymethod);
 						all_discmethod.push(d.discoverymethod);
 					}
-					
+					if(!all_disclocale.includes(d.disc_locale)){
+						all_disclocale.push(d.disc_locale);
+					}
+					if(!all_disctelescope.includes(d.disc_telescope)){
+						all_disctelescope.push(d.disc_telescope);
+					}
+					if(!all_discfacility.includes(d.disc_facility)){
+						all_discfacility.push(d.disc_facility);
+					}
+					if (d.pl_dens > 11){
+						d.pl_dens = 0;
+					}
 					for (let key in d) {
 						
 					  if (!isNaN(d[key])) {
@@ -622,33 +634,72 @@
 
 					d.esi = calculateESI(d.pl_bmasse, d.pl_rade, d.pl_eqt, d.pl_dens);
 				});
-				//	打印d.esi和d.pl_eqt
-				//
-				console.log(data.map(d=>d.pl_eqt))
-				console.log(data.map(d=>d.esi))
+				
+
+				//console.log("all_discmethod",all_discmethod);
+				console.log("all_disclocale",all_disclocale);
+
+				function getTopThreeKeysList(obj) {
+					// 将对象转换为数组，数组的每个元素是一个包含键和值的数组
+					var entries = Object.entries(obj);
+				
+					// 按值从大到小排序数组
+					entries.sort((a, b) => b[1] - a[1]);
+				
+					// 创建一个新的数组，包含出现次数最高的3个键
+					var topThreeKeys = [];
+					for (var i = 0; i < 10 && i < entries.length; i++) {
+						topThreeKeys.push(entries[i][0]);
+					}
+				
+					return topThreeKeys;
+				}
+				function getTopThreeKeysList(obj) {
+					// 将对象转换为数组，数组的每个元素是一个包含键和值的数组
+					var entries = Object.entries(obj);
+				
+					// 按值从大到小排序数组
+					entries.sort((a, b) => b[1] - a[1]);
+				
+					// 创建一个新的数组，包含出现次数最高的3个键
+					var topThreeKeys = [];
+					for (var i = 0; i < 3 && i < entries.length; i++) {
+						topThreeKeys.push(entries[i][0]);
+					}
+				
+					return topThreeKeys;
+				}
+				
+				topDiscmethodKeys = getTopThreeKeysList(discmethodCounts);
+				topDisclocaleKeys = getTopThreeKeysList(disclocaleCounts);
+				topDisctelescopeKeys = getTopThreeKeysList(disctelescopeCounts);
+				topDiscfacilityKeys = getTopThreeKeysList(discfacilityCounts);
+				
+				console.log(topDiscmethodKeys);
+				console.log(topDisclocaleKeys);
+				console.log(topDisctelescopeKeys);
+				console.log(topDiscfacilityKeys);
+				
 				RawplanetData = data;
 				//
-				let filteredData = RawplanetData.filter(d => !TemperatureoutlierNames.includes(d.pl_name)).map(d => d.st_teff);
+				let filteredData = RawplanetData.map(d => d.st_teff);
 				TempQs = getQuartile(filteredData);
 			
 				//console.log("tempMinMax",TempQs);
 				filteredData = RawplanetData.filter(d => !RadiusoutlierNames.includes(d.pl_name)).map(d => d.st_rad);
 				RadQs = getQuartile(filteredData);
 
+				filteredData = RawplanetData.map(d => d.pl_rade);
+				pl_radQs = getQuartile(filteredData);
 
+				filteredData = RawplanetData.map(d => d.pl_bmasse);
+				pl_massQs = getQuartile(filteredData);
 
-
-				//console.log("radMinMax",RadQs);
-				//get pl_maxTemp
-				pl_tempQs = getQuartile(RawplanetData.map(d => d.st_teff));
-				pl_maxTemp = pl_tempQs[1];
-				pl_minTemp = pl_tempQs[0];
-				pl_radQs = getQuartile(RawplanetData.map(d => d.st_rad));
-				pl_maxR = pl_radQs[1];
-				pl_minR = pl_radQs[0];
 
 				DensityQs = getQuartile(RawplanetData.map(d => d.pl_dens));
-				console.log("DensityQs",DensityQs);
+				console.log("DensityQs", DensityQs);
+				console.log("pl_radQs", pl_radQs);
+				console.log("pl_massQs", pl_massQs);
 
 				
 				renderScene(data, 0);
@@ -660,20 +711,68 @@
 			animate();
 
 			function reRenderScene(Delay){
-				
-				
 				scene.remove(points);
-				
+				pubdate = document.getElementById('pubdate');
+				pubdate.style.opacity = '0';
+				discmethod = sceneProperties.discmethod;
+				disclocale = sceneProperties.disclocale;
+				disctelescope = sceneProperties.disctelescope;
+				discfacility = sceneProperties.discfacility;
+				if((discfacility) == "TESS"){
+					discfacility = "Transiting Exoplanet Survey Satellite (TESS)";
+				}
+				if(disctelescope == "Kepler Telescope"){
+					disctelescope = "0.95 m Kepler Telescope";
+				}
+				if(disctelescope == "TESS Telescope"){
+					disctelescope = "0.1 m TESS Telescope";
+				}
+				console.log(discmethod, disclocale, disctelescope, discfacility);
 				points = null;
 				generated_points = [];
+				colors = [];
 				pointColors = [];
 				pointSizes = [];
 				maxT = sceneProperties.maxT;
 				minT = sceneProperties.minT;
 				maxR = sceneProperties.maxR;
 				minR = sceneProperties.minR;
+				pl_maxR = sceneProperties.pl_maxR;
+				pl_minR = sceneProperties.pl_minR;
+				pl_maxM = sceneProperties.pl_maxM;
+				pl_minM = sceneProperties.pl_minM;
+				pl_maxDens = sceneProperties.pl_maxDens;
+				pl_minDens = sceneProperties.pl_minDens;
 				//console.log(maxT, minT, maxR, minR);
 				rerenderData = RawplanetData.filter(d=>d.st_teff >= minT && d.st_teff <= maxT && d.st_rad >= minR && d.st_rad <= maxR);
+				rerenderData = rerenderData.filter(d=>d.pl_rade >= pl_minR && d.pl_rade <= pl_maxR && d.pl_bmasse >= pl_minM && d.pl_bmasse <= pl_maxM && d.pl_dens >= pl_minDens && d.pl_dens <= pl_maxDens);
+				
+				if (discmethod != "all" && discmethod != 'others'){
+					rerenderData = rerenderData.filter(d=>d.discoverymethod == discmethod);
+				}
+				if (discmethod == 'others'){
+					rerenderData = rerenderData.filter(d=>!topDiscmethodKeys.includes(d.discoverymethod));
+				}
+				if (disclocale != "all" && disclocale != 'others'){
+					rerenderData = rerenderData.filter(d=>d.disc_locale == disclocale);
+				}
+				if (disclocale == 'others'){
+					rerenderData = rerenderData.filter(d=>!topDisclocaleKeys.includes(d.disc_locale));
+				}
+				if (disctelescope != "all" && disctelescope != 'others'){
+					rerenderData = rerenderData.filter(d=>d.disc_telescope == disctelescope);
+				}
+				if (disctelescope == 'others'){
+					//console.log(d.disc_telescope);
+					console.log(topDisctelescopeKeys);
+					rerenderData = rerenderData.filter(d=>!topDisctelescopeKeys.includes(d.disc_telescope));
+				}
+				if (discfacility != "all" && discfacility != 'others'){
+					rerenderData = rerenderData.filter(d=>d.disc_facility == discfacility);
+				}
+				if (discfacility == 'others'){
+					rerenderData = rerenderData.filter(d=>!topDiscfacilityKeys.includes(d.disc_facility));
+				}
 				stars = sceneProperties.renderstarcount;
 				siblings = sceneProperties.rendersiblingcount;
 				if (stars != -1){
@@ -689,6 +788,7 @@
 				}
 				//sizescale = Math.min(Math.sqrt(RawplanetData.length/rerenderData.length),5);
 				sizescale = 1.5;
+				console.log(rerenderData.length);
 				renderScene(rerenderData, Delay);
 			}
 
@@ -698,7 +798,7 @@
 				controls.target = new THREE.Vector3(0,0,0);
 			}
 
-			var legendShown = false; // checks whether legend should be shown
+			var legendShown = true; // checks whether legend should be shown
 
 
 			// hide and show the legend
@@ -726,8 +826,10 @@
 				// showOnlyEarthLikePlanets: false,
 				randomColor: false,
 				SizeFactor: 2,
+				usestarcolor: function() {renderMode = 0;reRenderScene(0);},
+				useplanetcolor: function() {renderMode = 1;reRenderScene(0);},
 				habitable: 'Display all',
-				reRender: function() {reRenderScene(2);SizeFactor = 3;this.SizeFactor = 3;},
+				reRender: function() {renderMode = 1;hideMainTooltip();removeHighlights();reRenderScene(2)},
 				resetCamera: function() {resetCamera()},
 				displayLegend: true,
 				hideTooltips: function(){
@@ -739,36 +841,55 @@
 				minT: 0,
 				maxR: 100,
 				minR: 0,
+				pl_maxM: 89700,
+				pl_minM: 0,
+				pl_maxR:100,
+				pl_minR:0,
+				pl_maxDens:11,
+				pl_minDens:0,
 				maxTBar: 10000,
 				minTBar: 0,
 				maxRBar: 10000,
 				minRBar: 0,
+				pl_maxMBar: 10000,
+				pl_minMBar: 0,
+				pl_maxRBar: 10000,
+				pl_minRBar: 0,
+				pl_maxDensBar: 10000,
+				pl_minDensBar: 0,
+				randomColor: false,
 				renderstarcount: -1,
 				rendersiblingcount: -1,
+				search: '',
+				discmethod: 'all',
+				disclocale: 'all',
+				disctelescope: 'all',
+				discfacility: 'all',
+				
 			}
 
 			// add buttons/folders to dat.gui
 			
 			var gui = new dat.GUI({width: 400});
+			//var discmethodOptions = {'Transit': 0', 'Radial Velocity': 1, 'Microlensing': 2, 'Imaging': 3, 'others': 1, 'all': -1};
 			var autoRotateToggle = gui.add(sceneProperties, 'autoRotate').name('Auto Rotate').listen();
 			autoRotateToggle.onChange(function(value){controls.autoRotate = value});
 			var resetCameraButton = gui.add(sceneProperties, 'resetCamera').name('Reset Camera');
-			var reloadFolder = gui.addFolder('Requires Re-Render');
+			var colorfolder = gui.addFolder('Color Options');
+			var starcolorbutton = colorfolder.add(sceneProperties, 'usestarcolor').name('Stellar Temperature').listen();
+			var planetcolorbutton = colorfolder.add(sceneProperties, 'useplanetcolor').name('Planets of Interest').listen();
+			colorfolder.open();
+			var reloadFolder = gui.addFolder('Discovery History Animation');
 			// var tempOutliersToggle = reloadFolder.add(sceneProperties, 'renderWithTempOutliers').name('Render ETemp Outliers').listen();
 			// tempOutliersToggle.onChange(function(value){renderWithTempOutliers = value});
 			var colorOptions = { 'By Temperature': false}; 
 			var SizeOptions = { 'By Stellar Radius': 2, 'By Sibling Count': 3}; 
 			var starCountOptions = { 'all': -1, '1': 1, '2': 2, '3': 3, '4': 4}; 
 			var siblingCountOptions = { 'all': -1, '1': 1, '2': 2, '3': 3, '4': 4,'5': 5, '6': 6,'7': 7, '8': 8}; 
-			var legendToggle = gui.add(sceneProperties, 'displayLegend').name('Turn Off Legend').listen();
-			legendToggle.onChange(function(value){
-				legendShown = value;
-				if(legendShown){ showLegend(); }
-				else{ hideLegend(); } 
-			});
-			gui.add(sceneProperties, 'reRender').name("Play Animation");
-			var filterFolder = gui.addFolder('filter');
 
+			gui.add(sceneProperties, 'reRender').name("Play Animation");
+			
+			var filterFolder = gui.addFolder('Star Features');
 			MaxTcontroller = filterFolder.add(sceneProperties, 'maxTBar', 0, 10000).name('Max Temperature:40000').onChange(()=>reRenderScene(0));
 			MinTcontroller = filterFolder.add(sceneProperties, 'minTBar', 0, 10000).name('Min Temperature: 0').onChange(()=>reRenderScene(0));
 			MaxRcontroller = filterFolder.add(sceneProperties, 'maxRBar', 0, 10000).name('Max Radius:109.49').onChange(()=>reRenderScene(0));
@@ -796,13 +917,15 @@
 				sceneProperties.renderstarcount = value;
 				reRenderScene(0);
 			});
-			
+
 			siblingCountController = filterFolder.add(sceneProperties, 'rendersiblingcount', siblingCountOptions).name('Sibling(s) in System');
 			siblingCountController.onChange(function(value) {
 				sceneProperties.rendersiblingcount = value;
 				reRenderScene(0);
 			});
 			MaxTcontroller.onChange(()=>{
+				renderMode = 0;
+				PlanetfilterFolder.close();
 				min = TempQs[0];
 				max = TempQs[1];
 				Q1 = TempQs[2];
@@ -830,6 +953,8 @@
 			}
 			);
 			MaxRcontroller.onChange(()=>{
+				renderMode = 0;
+				PlanetfilterFolder.close();
 				min = RadQs[0];
 				max = RadQs[1];
 				Q1 = RadQs[2];
@@ -857,6 +982,8 @@
 			}
 			);
 			MinTcontroller.onChange(()=>{
+				renderMode = 0;
+				PlanetfilterFolder.close();
 				min = TempQs[0];
 				max = TempQs[1];
 				Q1 = TempQs[2];
@@ -885,6 +1012,8 @@
 			}
 			);
 			MinRcontroller.onChange(()=>{
+				renderMode = 0;
+				PlanetfilterFolder.close();
 				min = RadQs[0];
 				max = RadQs[1];
 				Q1 = RadQs[2];
@@ -913,7 +1042,203 @@
 				reRenderScene(0);
 			}
 			);
+			
+			var PlanetfilterFolder = gui.addFolder('Planet Features');
+			pl_MaxMcontroller = PlanetfilterFolder.add(sceneProperties, 'pl_maxMBar', 0, 10000).name('Max Earth Mass:89700').onChange(()=>reRenderScene(0));
+			pl_MinMcontroller = PlanetfilterFolder.add(sceneProperties, 'pl_minMBar', 0, 10000).name('Min Earth Mass: 0').onChange(()=>reRenderScene(0));
+			pl_MaxRcontroller = PlanetfilterFolder.add(sceneProperties, 'pl_maxRBar', 0, 10000).name('Max Earth Radius:77.342').onChange(()=>reRenderScene(0));
+			pl_MinRcontroller = PlanetfilterFolder.add(sceneProperties, 'pl_minRBar', 0, 10000).name('Min Earth Radius:0').onChange(()=>reRenderScene(0));
+			pl_MaxDenscontroller = PlanetfilterFolder.add(sceneProperties, 'pl_maxDensBar', 0, 10000).name('Max Density: 18').onChange(()=>reRenderScene(0));
+			pl_MinDenscontroller = PlanetfilterFolder.add(sceneProperties, 'pl_minDensBar', 0, 10000).name('Min Density: 0').onChange(()=>reRenderScene(0));
+			//创建名为discmethod的下拉列表
+			PlanetfilterFolder.add(sceneProperties, 'discmethod',["Transit", "Radial Velocity", "Microlensing","others","all"]).name("Discovery Method").onChange(()=>reRenderScene(0));
+			PlanetfilterFolder.add(sceneProperties, 'disclocale',["Space", "Ground", "Multiple Locales","all"]).name("Discovery Locale").onChange(()=>reRenderScene(0));
+			PlanetfilterFolder.add(sceneProperties, 'disctelescope',["Kepler Telescope", "TESS Telescope", "Multiple Telescopes","others","all"]).name("Discovery Telescope").onChange(()=>reRenderScene(0));
+			PlanetfilterFolder.add(sceneProperties, 'discfacility',["Kepler", "K2", "TESS","others","all"]).name("Discovery Facility").onChange(()=>reRenderScene(0));
+			
+
+			pl_MaxMcontroller.onChange(()=>{
+				renderMode = 1;
+				filterFolder.close();
+				min = pl_massQs[0];
+				max = pl_massQs[1];
+				Q1 = pl_massQs[2];
+				Q2 = pl_massQs[3];
+				Q3 = pl_massQs[4];
+				if(sceneProperties.pl_maxMBar < 2500){
+					sceneProperties.pl_maxM = sceneProperties.pl_maxMBar / 2500 * Q1;
+				}
+				else if(sceneProperties.pl_maxMBar < 5000){
+					sceneProperties.pl_maxM = Q1 + (sceneProperties.pl_maxMBar - 2500) / 2500 * (Q2 - Q1);
+				}
+				else if(sceneProperties.pl_maxMBar < 7500){
+					sceneProperties.pl_maxM = Q2 + (sceneProperties.pl_maxMBar - 5000) / 2500 * (Q3 - Q2);
+				}
+				else if(sceneProperties.pl_maxMBar < 9500){
+					sceneProperties.pl_maxM = Q3 + (sceneProperties.pl_maxMBar - 7500) / 2000 * (2000 - Q3);
+					
+				}
+				else{
+					sceneProperties.pl_maxM = 20000 + (sceneProperties.pl_maxMBar - 9500) / 500 * (max - 2000);
+				}
+				//console.log("pl_maxM",sceneProperties.pl_maxM);
+				pl_MaxMcontroller.name('Max Earth Mass: '+sceneProperties.pl_maxM.toFixed(2).toString());
+				reRenderScene(0);
+			}
+			);
+			pl_MinRcontroller.onChange(()=>{
+				renderMode = 1;
+				filterFolder.close();
+				min = pl_radQs[0];
+				max = pl_radQs[1];
+				Q1 = pl_radQs[2];
+				Q2 = pl_radQs[3];
+				Q3 = pl_radQs[4];
+				if(sceneProperties.pl_minRBar < 2500){
+					sceneProperties.pl_minR = sceneProperties.pl_minRBar / 2500 * Q1;
+				}
+				else if(sceneProperties.pl_minRBar < 5000){
+					sceneProperties.pl_minR = Q1 + (sceneProperties.pl_minRBar - 2500) / 2500 * (Q2 - Q1);
+				}
+				else if(sceneProperties.pl_minRBar < 7500){
+					sceneProperties.pl_minR = Q2 + (sceneProperties.pl_minRBar - 5000) / 2500 * (Q3 - Q2);
+				}
+				else if(sceneProperties.pl_minRBar < 9500){
+					sceneProperties.pl_minR = Q3 + (sceneProperties.pl_minRBar - 7500) / 2000 * (25 - Q3);
+					
+				}
+				else{
+					sceneProperties.pl_minR = 25 + (sceneProperties.pl_minRBar - 9500) / 500 * (max - 25);
+				}
+				//console.log("pl_minR",sceneProperties.pl_minR);
+				pl_MinRcontroller.name('Min Earth Radius: '+sceneProperties.pl_minR.toFixed(3).toString());
+			reRenderScene(0);
+			}
+			);
+			pl_MinMcontroller.onChange(()=>{
+				renderMode = 1;
+				filterFolder.close();
+				min = pl_massQs[0];
+				max = pl_massQs[1];
+				Q1 = pl_massQs[2];
+				Q2 = pl_massQs[3];
+				Q3 = pl_massQs[4];
+				if(sceneProperties.pl_minMBar < 2500){
+					sceneProperties.pl_minM = sceneProperties.pl_minMBar / 2500 * Q1;
+				}
+				else if(sceneProperties.pl_minMBar < 5000){
+					sceneProperties.pl_minM = Q1 + (sceneProperties.pl_minMBar - 2500) / 2500 * (Q2 - Q1);
+				}
+				else if(sceneProperties.pl_minMBar < 7500){
+					sceneProperties.pl_minM = Q2 + (sceneProperties.pl_minMBar - 5000) / 2500 * (Q3 - Q2);
+				}
+				else if(sceneProperties.pl_minMBar < 9500){
+					sceneProperties.pl_minM = Q3 + (sceneProperties.pl_minMBar - 7500) / 2000 * (2000 - Q3);
+					
+				}
+				else{
+					sceneProperties.pl_minM = 2000 + (sceneProperties.pl_minMBar - 9500) / 500 * (max - 2000);
+				}
+				//console.log("pl_minM",sceneProperties.pl_minM);
+				pl_MinMcontroller.name('Min Earth Mass: '+sceneProperties.pl_minM.toFixed(2).toString());
+				reRenderScene(0);
+			}
+			);
+
+
+			pl_MaxRcontroller.onChange(()=>{
+				renderMode = 1;
+				min = pl_radQs[0];
+				max = pl_radQs[1];
+				Q1 = pl_radQs[2];
+				Q2 = pl_radQs[3];
+				Q3 = pl_radQs[4];
+				if(sceneProperties.pl_minRBar < 2500){
+					sceneProperties.pl_maxR = sceneProperties.pl_maxRBar / 2500 * Q1;
+				}
+				else if(sceneProperties.pl_maxRBar < 5000){
+					sceneProperties.pl_maxR = Q1 + (sceneProperties.pl_maxRBar - 2500) / 2500 * (Q2 - Q1);
+				}
+				else if(sceneProperties.pl_maxRBar < 7500){
+					sceneProperties.pl_maxR = Q2 + (sceneProperties.pl_maxRBar - 5000) / 2500 * (Q3 - Q2);
+				}
+				else if(sceneProperties.pl_maxRBar < 9500){
+					sceneProperties.pl_maxR = Q3 + (sceneProperties.pl_maxRBar - 7500) / 2000 * (25 - Q3);
+					
+				}
+				else{
+					sceneProperties.pl_maxR = 25 + (sceneProperties.pl_maxRBar - 9500) / 500 * (max - 25);
+				}
+				//console.log("pl_maxR",sceneProperties.pl_maxR);
+				pl_MaxRcontroller.name('Max Earth Radius: '+sceneProperties.pl_maxR.toFixed(3).toString());
+				filterFolder.close();
+				reRenderScene(0);
+			}
+			);
+			pl_MinDenscontroller.onChange(()=>{
+				
+				renderMode = 1;
+				min = DensityQs[0];
+				max = DensityQs[1];
+				Q1 = DensityQs[2];
+				Q2 = DensityQs[3];
+				Q3 = DensityQs[4];
+				if(sceneProperties.pl_minDensBar < 2500){
+					sceneProperties.pl_minDens = sceneProperties.pl_minDensBar / 2500 * Q1;
+				}
+				else if(sceneProperties.pl_minDensBar < 5000){
+					sceneProperties.pl_minDens = Q1 + (sceneProperties.pl_minDensBar - 2500) / 2500 * (Q2 - Q1);
+				}
+				else if(sceneProperties.pl_minDensBar < 7500){
+					sceneProperties.pl_minDens = Q2 + (sceneProperties.pl_minDensBar - 5000) / 2500 * (Q3 - Q2);
+				}
+				else if(sceneProperties.pl_minDensBar < 9500){
+					sceneProperties.pl_minDens = Q3 + (sceneProperties.pl_minDensBar - 7500) / 2000 * (9 - Q3);
+					
+				}
+				else{
+					sceneProperties.pl_minDens = 9 + (sceneProperties.pl_minDensBar - 9500) / 500 * (max - 9);
+				}
+				//console.log("pl_minDens",sceneProperties.pl_minDens);
+				pl_MinDenscontroller.name('Min Density: '+sceneProperties.pl_minDens.toFixed(2).toString());
+				filterFolder.close();
+				reRenderScene(0);
+			}
+			);
+			pl_MaxDenscontroller.onChange(()=>{
+
+				min = DensityQs[0];
+				max = DensityQs[1];
+				Q1 = DensityQs[2];
+				Q2 = DensityQs[3];
+				Q3 = DensityQs[4];
+				if(sceneProperties.pl_maxDensBar < 2500){
+					sceneProperties.pl_maxDens = sceneProperties.pl_maxDensBar / 2500 * Q1;
+				}
+				else if(sceneProperties.pl_maxDensBar < 5000){
+					sceneProperties.pl_maxDens = Q1 + (sceneProperties.pl_maxDensBar - 2500) / 2500 * (Q2 - Q1);
+				}
+				else if(sceneProperties.pl_maxDensBar < 7500){
+					sceneProperties.pl_maxDens = Q2 + (sceneProperties.pl_maxDensBar - 5000) / 2500 * (Q3 - Q2);
+				}
+				else if(sceneProperties.pl_maxDensBar < 9500){
+					sceneProperties.pl_maxDens = Q3 + (sceneProperties.pl_maxDensBar - 7500) / 2000 * (9 - Q3);
+					
+				}
+				else{
+					sceneProperties.pl_maxDens = 9 + (sceneProperties.pl_maxDensBar - 9500) / 500 * (max - 9);
+				}
+				//console.log("pl_minDens",sceneProperties.pl_minDens);
+				pl_MaxDenscontroller.name('Max Density: '+sceneProperties.pl_maxDens.toFixed(2).toString());
+				renderMode = 1;
+				reRenderScene(0);
+				filterFolder.close();
+				
+			}
+			);
+			
 			filterFolder.open();
+			//PlanetfilterFolder.open();
 			reloadFolder.open();
 			gui.open();	
 			
