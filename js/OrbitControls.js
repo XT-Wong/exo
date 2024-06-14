@@ -240,9 +240,7 @@ THREE.OrbitControls = function ( object, domElement ) {
 
 	};
 
-	//
-	// internals
-	//
+
 
 	var scope = this;
 

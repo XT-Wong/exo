@@ -532,7 +532,8 @@
 					pubdate.style.opacity = '1';
 					//在画布左下角显示filtered_RawplanetData_sortedByDate.disc_pubdate
 					//console.log(filtered_RawplanetData_sortedByDate);
-					for (let i = 0; i < filtered_RawplanetData_sortedByDate.length; i++) {
+					let len = filtered_RawplanetData_sortedByDate.length
+					for (let i = 0; i < len; i++) {
 						setTimeout(() => {
 								idx = filtered_RawplanetData_sortedByDate[i].firstsible;
 								pointsGeometry.attributes.alpha.array[idx] = 1;
@@ -540,6 +541,7 @@
 								//console.log(star_cnt);
 								pointsGeometry.attributes.alpha.needsUpdate = true;
 								pointsGeometry.attributes.size.needsUpdate = true;
+								camera.position.set(400+1200*(i/len), 200+600*(i/len), 0);
 								
 								pubdate.textContent = filtered_RawplanetData_sortedByDate[i].disc_pubdate;
 								console.log(pubdate);
